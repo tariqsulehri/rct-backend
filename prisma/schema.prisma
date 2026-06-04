@@ -1,0 +1,378 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// REFERENCE DATA - Seeded once, rarely change
+// ============================================================================
+
+model Grade {
+  id               Int     @id @default(autoincrement())
+  code             String  @unique
+  title            String
+  level            Int
+  experience_years Int
+  performance_note String?
+
+  employees_current    Employee[]               @relation("CurrentGrade")
+  employees_target     Employee[]               @relation("TargetGrade")
+  grade_matrices       GradeMatrix[]
+  domain_grade_weights SkillDomainGradeWeight[]
+
+  @@index([level])
+  @@map("grades")
+}
+
+model SkillDomain {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+  color       String? // Hex color for UI badges/visualization (e.g. '#3B82F6')
+
+  domain_scores      DomainScore[]
+  department_weights DepartmentDomainWeight[]
+  competency_domains CompetencyDomainMap[]
+  grade_weights      SkillDomainGradeWeight[]
+
+  @@map("skill_domains")
+}
+
+model SkillDomainGradeWeight {
+  id        Int   @id @default(autoincrement())
+  domain_id Int
+  grade_id  Int
+  weight    Float // [0.0-1.0] domain contribution weight at this grade level
+
+  domain SkillDomain @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  grade  Grade       @relation(fields: [grade_id], references: [id], onDelete: Cascade)
+
+  @@unique([domain_id, grade_id])
+  @@index([domain_id])
+  @@index([grade_id])
+  @@map("skill_domain_grade_weights")
+}
+
+model CompetencyCategory {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+  color       String? // Optional hex color for UI badges
+
+  competencies Competency[]
+
+  @@map("competency_categories")
+}
+
+model CompetencyDomainMap {
+  id            Int @id @default(autoincrement())
+  competency_id Int
+  domain_id     Int
+
+  is_primary Boolean  @default(false) // Primary domain for this competency (for reporting)
+  created_at DateTime @default(now())
+
+  competency Competency  @relation("CompetencyToDomains", fields: [competency_id], references: [id], onDelete: Cascade)
+  domain     SkillDomain @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+
+  @@unique([competency_id, domain_id])
+  @@index([competency_id])
+  @@index([domain_id])
+  @@map("competency_domain_maps")
+}
+
+model Competency {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String
+  is_critical Boolean @default(false)
+
+  // Categorization
+  category_id         Int
+  competency_category CompetencyCategory @relation(fields: [category_id], references: [id], onDelete: Restrict)
+
+  // M-to-M relationship to domains (allows behavioral skills across multiple domains)
+  competency_domains CompetencyDomainMap[] @relation("CompetencyToDomains")
+
+  levels            CompetencyLevel[]
+  technologies      Technology[]
+  grade_matrices    GradeMatrix[]
+  competency_scores CompetencyScore[]
+
+  @@index([category_id])
+  @@map("competencies")
+}
+
+model CompetencyLevel {
+  id            Int @id @default(autoincrement())
+  competency_id Int
+  level         Int // 1..5
+
+  descriptor Json // Flexible descriptor with summary, kpis, behaviours, etc.
+
+  competency Competency @relation(fields: [competency_id], references: [id], onDelete: Cascade)
+
+  @@unique([competency_id, level])
+  @@map("competency_levels")
+}
+
+model Technology {
+  id            Int    @id @default(autoincrement())
+  name          String
+  competency_id Int
+
+  competency        Competency        @relation(fields: [competency_id], references: [id], onDelete: Cascade)
+  skill_assessments SkillAssessment[]
+
+  @@unique([name, competency_id]) // duplicate guard: same name cannot appear twice under same competency
+  @@index([competency_id])
+  @@map("technologies")
+}
+
+model Department {
+  id              Int      @id @default(autoincrement())
+  organization_id Int
+  name            String
+  description     String?
+  created_at      DateTime @default(now())
+
+  organization   Organization             @relation(fields: [organization_id], references: [id], onDelete: Restrict)
+  employees      Employee[]
+  config         DepartmentConfig?
+  domain_weights DepartmentDomainWeight[]
+
+  @@unique([organization_id, name])
+  @@index([organization_id])
+  @@map("departments")
+}
+
+model Organization {
+  id         Int      @id @default(autoincrement())
+  name       String   @unique
+  slug       String   @unique
+  logo_url   String?
+  base_url   String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  departments Department[]
+  employees   Employee[]
+
+  @@map("organizations")
+}
+
+model DepartmentConfig {
+  id                      Int      @id @default(autoincrement())
+  department_id           Int      @unique
+  // Scoring formula weights — must sum to 1.0
+  primary_weight          Float    @default(0.5)
+  secondary_weight        Float    @default(0.3)
+  tertiary_weight         Float    @default(0.2)
+  // Grade matrix: use global by default, department override optional
+  use_custom_grade_matrix Boolean  @default(false)
+  notes                   String?
+  updated_at              DateTime @updatedAt
+
+  department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
+
+  @@map("department_configs")
+}
+
+model DepartmentDomainWeight {
+  id            Int     @id @default(autoincrement())
+  department_id Int
+  domain_id     Int
+  weight        Float   @default(0.142857)
+  is_active     Boolean @default(true)
+
+  department Department  @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  domain     SkillDomain @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+
+  @@unique([department_id, domain_id])
+  @@map("department_domain_weights")
+}
+
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+model GradeMatrix {
+  id            Int @id @default(autoincrement())
+  grade_id      Int
+  competency_id Int
+
+  threshold Float // Required score [0.0-1.0] for this grade
+
+  grade      Grade      @relation(fields: [grade_id], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competency_id], references: [id], onDelete: Cascade)
+
+  @@unique([grade_id, competency_id])
+  @@index([grade_id])
+  @@index([competency_id])
+  @@map("grade_matrix")
+}
+
+// ============================================================================
+// AUTH & USERS
+// ============================================================================
+
+enum Role {
+  ADMIN
+  MANAGER
+  ENGINEER
+}
+
+model User {
+  id            Int    @id @default(autoincrement())
+  employee_id   Int    @unique
+  username      String @unique
+  password_hash String // bcrypt cost 12
+  role          Role
+
+  is_active      Boolean   @default(true)
+  login_attempts Int       @default(0)
+  locked_until   DateTime? // Brute-force lockout
+  last_login_at  DateTime?
+
+  password_reset_token String?   @unique
+  reset_token_expires  DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  employee       Employee       @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  refresh_tokens RefreshToken[]
+
+  @@index([employee_id])
+  @@index([username])
+  @@map("users")
+}
+
+model RefreshToken {
+  id      Int @id @default(autoincrement())
+  user_id Int
+
+  token_hash String @unique // SHA-256 hash of actual token
+
+  expires_at DateTime
+  revoked    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("refresh_tokens")
+}
+
+// ============================================================================
+// TRANSACTIONAL DATA
+// ============================================================================
+
+model Employee {
+  id              Int     @id @default(autoincrement())
+  organization_id Int
+  emp_code        String  @unique
+  full_name       String
+  department      String
+  email           String?
+
+  current_grade_id Int
+  target_grade_id  Int
+  manager_id       Int?
+  department_id    Int?
+
+  deleted_at DateTime? // Soft delete
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  organization  Organization @relation(fields: [organization_id], references: [id], onDelete: Restrict)
+  current_grade Grade        @relation("CurrentGrade", fields: [current_grade_id], references: [id])
+  target_grade  Grade        @relation("TargetGrade", fields: [target_grade_id], references: [id])
+  manager       Employee?    @relation("Reports", fields: [manager_id], references: [id])
+  reports       Employee[]   @relation("Reports")
+  dept          Department?  @relation(fields: [department_id], references: [id])
+
+  user              User?
+  skill_assessments SkillAssessment[]
+  competency_scores CompetencyScore[]
+  domain_scores     DomainScore[]
+
+  @@index([manager_id])
+  @@index([organization_id])
+  @@index([current_grade_id])
+  @@index([deleted_at])
+  @@index([department_id])
+  @@map("employees")
+}
+
+model SkillAssessment {
+  id            Int @id @default(autoincrement())
+  employee_id   Int
+  technology_id Int
+
+  type     String // 'Primary' | 'Secondary' | 'Tertiary'
+  projects Int // 0 | 1 | 2 | 3
+  level    String  @default("Unset") // 'Expert' | 'Advanced' | 'Proficient' | 'Foundational' | 'Beginner' | 'Awareness' | 'Unset'
+  score    Decimal @default(0) @db.Decimal(6, 2) // formula1(type,projects) × levelWeight — stored base score
+  status   String  @default("approved") // 'approved' | 'pending'
+
+  assessed_by Int
+  assessed_at DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  employee   Employee   @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  technology Technology @relation(fields: [technology_id], references: [id], onDelete: Cascade)
+
+  @@unique([employee_id, technology_id]) // one assessment per employee per technology
+  @@index([employee_id])
+  @@index([technology_id])
+  @@map("skill_assessments")
+}
+
+// ============================================================================
+// COMPUTED DATA (populated synchronously after assessment changes)
+// ============================================================================
+
+model CompetencyScore {
+  id            Int @id @default(autoincrement())
+  employee_id   Int
+  competency_id Int
+
+  score       Float? // [0.0-1.0] or NULL
+  level_label String? // 'L0 Developing' .. 'L4 Expert'
+  star_rating Int? // 1..5
+
+  updated_at DateTime @updatedAt
+
+  employee   Employee   @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competency_id], references: [id], onDelete: Cascade)
+
+  @@unique([employee_id, competency_id])
+  @@index([employee_id])
+  @@index([competency_id])
+  @@map("competency_scores")
+}
+
+model DomainScore {
+  id          Int @id @default(autoincrement())
+  employee_id Int
+  domain_id   Int
+
+  score Float? // [0.0-1.0] or NULL
+
+  updated_at DateTime @updatedAt
+
+  employee Employee    @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  domain   SkillDomain @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+
+  @@unique([employee_id, domain_id])
+  @@index([employee_id])
+  @@map("domain_scores")
+}

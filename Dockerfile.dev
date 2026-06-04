@@ -1,0 +1,17 @@
+FROM cgr.dev/chainguard/node:20-dev
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY prisma ./prisma
+RUN npx prisma generate
+
+# Source is volume-mounted in docker-compose.dev.yml for hot-reload.
+# This COPY ensures the image works standalone (e.g. CI smoke tests).
+COPY src ./src
+
+EXPOSE 4000
+
+CMD ["npm", "run", "dev"]
