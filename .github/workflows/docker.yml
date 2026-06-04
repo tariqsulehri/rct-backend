@@ -1,0 +1,110 @@
+name: Backend Docker CI/CD
+
+on:
+  push:
+    branches:
+      - dev
+      - stagging
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-docker-${{ github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: tariqsulehri/rct-backend
+
+jobs:
+  quality:
+    name: Quality checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Test
+        run: npm run test -- --runInBand
+
+      - name: Build app
+        run: npm run build
+
+  docker:
+    name: Build and push Docker image
+    runs-on: ubuntu-latest
+    needs: quality
+    environment: ${{ github.ref_name == 'master' && 'production' || github.ref_name }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Resolve image tags
+        id: tags
+        shell: bash
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            dev)
+              ENV_TAG="dev"
+              ;;
+            stagging)
+              ENV_TAG="stagging"
+              ;;
+            master)
+              ENV_TAG="production"
+              ;;
+            *)
+              echo "Unsupported branch: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+          SHORT_SHA="${GITHUB_SHA::7}"
+          {
+            echo "env_tag=${ENV_TAG}"
+            echo "sha_tag=${ENV_TAG}-${SHORT_SHA}"
+            echo "tags=${IMAGE_NAME}:${ENV_TAG},${IMAGE_NAME}:${ENV_TAG}-${SHORT_SHA}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Publish summary
+        run: |
+          echo "Published ${IMAGE_NAME}:${{ steps.tags.outputs.env_tag }}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Published ${IMAGE_NAME}:${{ steps.tags.outputs.sha_tag }}" >> "${GITHUB_STEP_SUMMARY}"

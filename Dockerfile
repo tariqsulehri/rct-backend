@@ -1,12 +1,14 @@
 # ── Stage 1: production deps only ────────────────────────────────────────────
-FROM cgr.dev/chainguard/node:20-dev AS prod-deps
+FROM node:24-alpine AS prod-deps
 WORKDIR /build
+RUN apk add --no-cache openssl
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
 # ── Stage 2: full deps + prisma generate + tsc build ─────────────────────────
-FROM cgr.dev/chainguard/node:20-dev AS builder
+FROM node:24-alpine AS builder
 WORKDIR /build
+RUN apk add --no-cache openssl
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY tsconfig.json ./
@@ -15,8 +17,9 @@ COPY prisma ./prisma
 RUN npx prisma generate && npm run build
 
 # ── Stage 3: zero-CVE runtime (no shell, no package manager) ─────────────────
-FROM cgr.dev/chainguard/node:20 AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
+RUN apk add --no-cache openssl
 
 COPY package.json ./
 COPY --from=prod-deps /build/node_modules       ./node_modules
