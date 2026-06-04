@@ -1,7 +1,7 @@
 {
   "name": "devops-carrier-backend",
   "version": "1.0.0",
-  "type": "module",
+  "type": "commonjs",
   "main": "dist/server.js",
   "scripts": {
     "dev": "node --env-file .env --import tsx src/server.ts",
