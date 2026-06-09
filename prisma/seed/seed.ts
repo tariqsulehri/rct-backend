@@ -705,9 +705,15 @@ async function main() {
     for (let i = 0; i < domainIds.length; i++) {
       const { id: domainId } = domainIds[i];
       await prisma.competencyDomainMap.upsert({
-        where: { competency_id_domain_id: { competency_id: comp.id, domain_id: domainId } },
+        where: {
+          department_id_competency_id_domain_id: {
+            department_id: departmentMap['DevOps'],
+            competency_id: comp.id,
+            domain_id: domainId,
+          },
+        },
         update: { is_primary: i === 0 },
-        create: { competency_id: comp.id, domain_id: domainId, is_primary: i === 0 },
+        create: { department_id: departmentMap['DevOps'], competency_id: comp.id, domain_id: domainId, is_primary: i === 0 },
       });
     }
 
@@ -821,9 +827,9 @@ async function main() {
       const threshold = gradeScores[gradeCode];
       if (!gradeId || threshold === undefined) continue;
       await prisma.gradeMatrix.upsert({
-        where:  { grade_id_competency_id: { grade_id: gradeId, competency_id: compId } },
+        where:  { department_id_grade_id_competency_id: { department_id: departmentMap['DevOps'], grade_id: gradeId, competency_id: compId } },
         update: { threshold },
-        create: { grade_id: gradeId, competency_id: compId, threshold },
+        create: { department_id: departmentMap['DevOps'], grade_id: gradeId, competency_id: compId, threshold },
       });
       matrixCount++;
     }

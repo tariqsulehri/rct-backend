@@ -4,6 +4,7 @@ export interface DomainRef {
 }
 
 export interface CompetencyDomainRef {
+  department_id?: number;
   is_primary: boolean;
   domain: DomainRef;
 }
@@ -19,17 +20,22 @@ export interface ThresholdStats {
   meetsCount: number;
 }
 
-export function getPrimaryDomain(competencyDomains: CompetencyDomainRef[]): DomainRef {
+export function getPrimaryDomain(competencyDomains: CompetencyDomainRef[], departmentId?: number | null): DomainRef {
   // Reporting assigns each competency to one display domain even when the
   // taxonomy links it to multiple domains.
-  const primary = competencyDomains.find((domainMap) => domainMap.is_primary);
-  return primary?.domain ?? competencyDomains[0]?.domain ?? { id: 0, name: 'Unknown' };
+  const departmentMaps = departmentId
+    ? competencyDomains.filter((domainMap) => domainMap.department_id === departmentId)
+    : [];
+  const maps = departmentMaps.length > 0 ? departmentMaps : competencyDomains;
+  const primary = maps.find((domainMap) => domainMap.is_primary);
+  return primary?.domain ?? maps[0]?.domain ?? { id: 0, name: 'Unknown' };
 }
 
 export function buildDomainScores(
   competencyScores: Map<number, number>,
   competencies: DomainScoredCompetency[],
   domainNames: string[],
+  departmentId?: number | null,
 ): Record<string, number> {
   const domainTotals = new Map<string, { sum: number; count: number }>();
   for (const domainName of domainNames) {
@@ -42,7 +48,7 @@ export function buildDomainScores(
     // down domain averages or overall scores.
     if (score <= 0) continue;
 
-    const domainName = getPrimaryDomain(competency.competency_domains).name;
+    const domainName = getPrimaryDomain(competency.competency_domains, departmentId).name;
     const total = domainTotals.get(domainName);
     if (!total) continue;
 

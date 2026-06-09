@@ -73,16 +73,19 @@ model CompetencyCategory {
 
 model CompetencyDomainMap {
   id            Int @id @default(autoincrement())
+  department_id Int
   competency_id Int
   domain_id     Int
 
   is_primary Boolean  @default(false) // Primary domain for this competency (for reporting)
   created_at DateTime @default(now())
 
+  department Department  @relation(fields: [department_id], references: [id], onDelete: Cascade)
   competency Competency  @relation("CompetencyToDomains", fields: [competency_id], references: [id], onDelete: Cascade)
   domain     SkillDomain @relation(fields: [domain_id], references: [id], onDelete: Cascade)
 
-  @@unique([competency_id, domain_id])
+  @@unique([department_id, competency_id, domain_id])
+  @@index([department_id])
   @@index([competency_id])
   @@index([domain_id])
   @@map("competency_domain_maps")
@@ -136,6 +139,63 @@ model Technology {
   @@map("technologies")
 }
 
+model AssessmentTypeConfig {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  label       String
+  weight      Float    @default(0)
+  description String?
+  sort_order  Int      @default(0)
+  is_active   Boolean  @default(true)
+  updated_at  DateTime @updatedAt
+
+  @@map("assessment_type_configs")
+}
+
+model AssessmentLevelConfig {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  label       String
+  weight      Float    @default(0)
+  threshold   Float?
+  description String?
+  sort_order  Int      @default(0)
+  is_active   Boolean  @default(true)
+  updated_at  DateTime @updatedAt
+
+  @@map("assessment_level_configs")
+}
+
+model AssessmentStatusConfig {
+  id                  Int      @id @default(autoincrement())
+  code                String   @unique
+  label               String
+  description         String?
+  counts_toward_score Boolean  @default(false)
+  is_terminal         Boolean  @default(false)
+  sort_order          Int      @default(0)
+  is_active           Boolean  @default(true)
+  updated_at          DateTime @updatedAt
+
+  @@map("assessment_status_configs")
+}
+
+model AssessmentProjectConfig {
+  id                  Int      @id @default(autoincrement())
+  project_count       Int      @unique
+  label               String
+  description         String?
+  duration_months_min Int?
+  duration_months_max Int?
+  credit              Float
+  threshold           Float?
+  sort_order          Int      @default(0)
+  is_active           Boolean  @default(true)
+  updated_at          DateTime @updatedAt
+
+  @@map("assessment_project_configs")
+}
+
 model Department {
   id              Int      @id @default(autoincrement())
   organization_id Int
@@ -147,6 +207,8 @@ model Department {
   employees      Employee[]
   config         DepartmentConfig?
   domain_weights DepartmentDomainWeight[]
+  grade_matrices GradeMatrix[]
+  competency_domain_maps CompetencyDomainMap[]
 
   @@unique([organization_id, name])
   @@index([organization_id])
@@ -205,18 +267,21 @@ model DepartmentDomainWeight {
 
 model GradeMatrix {
   id            Int @id @default(autoincrement())
+  department_id Int
   grade_id      Int
   competency_id Int
 
   threshold Float // Required score [0.0-1.0] for this grade
 
+  department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
   grade      Grade      @relation(fields: [grade_id], references: [id], onDelete: Cascade)
   competency Competency @relation(fields: [competency_id], references: [id], onDelete: Cascade)
 
-  @@unique([grade_id, competency_id])
+  @@unique([department_id, grade_id, competency_id])
+  @@index([department_id])
   @@index([grade_id])
   @@index([competency_id])
-  @@map("grade_matrix")
+  @@map("competency_grade_thresholds")
 }
 
 // ============================================================================

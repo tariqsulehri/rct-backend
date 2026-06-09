@@ -10,6 +10,7 @@ export const updateUserSchema = z.object({
   username: z.string().min(3).max(50).optional(),
   password: z.string().min(8).optional(),
   role: z.enum(['ADMIN', 'MANAGER', 'ENGINEER']).optional(),
+  employee_id: z.number().int().positive().optional(),
   is_active: z.boolean().optional(),
 });
 
@@ -46,6 +47,7 @@ export const createCompetencySchema = z.object({
   description: z.string().min(1),
   is_critical: z.boolean().optional(),
   category_id: z.number().int().positive(),
+  department_id: z.number().int().positive().optional(),
   domain_ids: z.array(z.number().int().positive()).min(1),
 });
 export const updateCompetencySchema = createCompetencySchema.partial();
@@ -68,6 +70,48 @@ export type CreateCompetencyInput = z.infer<typeof createCompetencySchema>;
 export type UpdateCompetencyInput = z.infer<typeof updateCompetencySchema>;
 export type CreateTechnologyInput = z.infer<typeof createTechnologySchema>;
 export type UpdateTechnologyInput = z.infer<typeof updateTechnologySchema>;
+
+export const updateAssessmentTypeConfigSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+  weight: z.number().min(0).max(1).optional(),
+  description: z.string().nullable().optional(),
+  sort_order: z.number().int().min(0).optional(),
+  is_active: z.boolean().optional(),
+});
+
+export const updateAssessmentLevelConfigSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+  weight: z.number().min(0).max(1).optional(),
+  threshold: z.number().min(0).max(1).nullable().optional(),
+  description: z.string().nullable().optional(),
+  sort_order: z.number().int().min(0).optional(),
+  is_active: z.boolean().optional(),
+});
+
+export const updateAssessmentStatusConfigSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+  description: z.string().nullable().optional(),
+  counts_toward_score: z.boolean().optional(),
+  is_terminal: z.boolean().optional(),
+  sort_order: z.number().int().min(0).optional(),
+  is_active: z.boolean().optional(),
+});
+
+export const updateAssessmentProjectConfigSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+  description: z.string().nullable().optional(),
+  duration_months_min: z.number().int().min(0).nullable().optional(),
+  duration_months_max: z.number().int().min(0).nullable().optional(),
+  credit: z.number().min(0).max(1).optional(),
+  threshold: z.number().min(0).max(1).nullable().optional(),
+  sort_order: z.number().int().min(0).optional(),
+  is_active: z.boolean().optional(),
+});
+
+export type UpdateAssessmentTypeConfigInput = z.infer<typeof updateAssessmentTypeConfigSchema>;
+export type UpdateAssessmentLevelConfigInput = z.infer<typeof updateAssessmentLevelConfigSchema>;
+export type UpdateAssessmentStatusConfigInput = z.infer<typeof updateAssessmentStatusConfigSchema>;
+export type UpdateAssessmentProjectConfigInput = z.infer<typeof updateAssessmentProjectConfigSchema>;
 
 export const createCompetencyCategorySchema = z.object({
   name:        z.string().min(1).max(100),
@@ -116,3 +160,22 @@ export const upsertDomainGradeWeightSchema = z.object({
   weight:    z.number().min(0).max(1),
 });
 export type UpsertDomainGradeWeightInput = z.infer<typeof upsertDomainGradeWeightSchema>;
+
+// Department + Grade + Skill thresholds
+const competencyGradeThresholdSchema = z.object({
+  grade_id: z.number().int().positive(),
+  competency_id: z.number().int().positive(),
+  threshold: z.number().min(0).max(1),
+});
+
+export const upsertCompetencyGradeThresholdSchema = competencyGradeThresholdSchema.extend({
+  department_id: z.number().int().positive(),
+});
+
+export const bulkUpsertCompetencyGradeThresholdsSchema = z.object({
+  department_id: z.number().int().positive(),
+  thresholds: z.array(competencyGradeThresholdSchema).min(1),
+});
+
+export type UpsertCompetencyGradeThresholdInput = z.infer<typeof upsertCompetencyGradeThresholdSchema>;
+export type BulkUpsertCompetencyGradeThresholdsInput = z.infer<typeof bulkUpsertCompetencyGradeThresholdsSchema>;

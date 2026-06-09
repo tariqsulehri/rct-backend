@@ -20,15 +20,34 @@ import {
   updateDepartmentSchema,
   upsertDepartmentConfigSchema,
   bulkUpsertDomainWeightsSchema,
+  updateAssessmentTypeConfigSchema,
+  updateAssessmentLevelConfigSchema,
+  updateAssessmentStatusConfigSchema,
+  updateAssessmentProjectConfigSchema,
   createCompetencyCategorySchema,
   updateCompetencyCategorySchema,
   upsertDomainGradeWeightSchema,
+  upsertCompetencyGradeThresholdSchema,
+  bulkUpsertCompetencyGradeThresholdsSchema,
 } from './config.schema';
 
 const router = Router();
 
 // All config routes require authentication
 router.use(authenticate);
+
+// ── Scoring Config (ADMIN only) ──────────────────────────────────────────────
+router.get('/assessment-types', requireRole('ADMIN'), configController.listAssessmentTypeConfigs);
+router.patch('/assessment-types/:id', requireRole('ADMIN'), validate(updateAssessmentTypeConfigSchema), configController.updateAssessmentTypeConfig);
+
+router.get('/assessment-levels', requireRole('ADMIN'), configController.listAssessmentLevelConfigs);
+router.patch('/assessment-levels/:id', requireRole('ADMIN'), validate(updateAssessmentLevelConfigSchema), configController.updateAssessmentLevelConfig);
+
+router.get('/assessment-statuses', requireRole('ADMIN'), configController.listAssessmentStatusConfigs);
+router.patch('/assessment-statuses/:id', requireRole('ADMIN'), validate(updateAssessmentStatusConfigSchema), configController.updateAssessmentStatusConfig);
+
+router.get('/assessment-projects', requireRole('ADMIN'), configController.listAssessmentProjectConfigs);
+router.patch('/assessment-projects/:id', requireRole('ADMIN'), validate(updateAssessmentProjectConfigSchema), configController.updateAssessmentProjectConfig);
 
 // ── Departments (ADMIN only) ──────────────────────────────────────────────────
 router.get('/departments', requireRole('ADMIN'), configController.listDepartments);
@@ -69,6 +88,11 @@ router.delete('/skill-domains/:id', requireRole('ADMIN'), configController.delet
 router.get('/domain-grade-weights', requireRole('ADMIN'), configController.listDomainGradeWeights);
 router.post('/domain-grade-weights', requireRole('ADMIN'), validate(upsertDomainGradeWeightSchema), configController.upsertDomainGradeWeight);
 router.delete('/domain-grade-weights/:id', requireRole('ADMIN'), configController.deleteDomainGradeWeight);
+
+// ── Department Skill Thresholds (ADMIN only) ─────────────────────────────────
+router.get('/competency-grade-thresholds', requireRole('ADMIN'), configController.listCompetencyGradeThresholds);
+router.post('/competency-grade-thresholds', requireRole('ADMIN'), validate(upsertCompetencyGradeThresholdSchema), configController.upsertCompetencyGradeThreshold);
+router.put('/competency-grade-thresholds/bulk', requireRole('ADMIN'), validate(bulkUpsertCompetencyGradeThresholdsSchema), configController.bulkUpsertCompetencyGradeThresholds);
 
 // ── Competencies (ADMIN only) ─────────────────────────────────────────────────
 router.get('/competencies', requireRole('ADMIN'), configController.listCompetencies);

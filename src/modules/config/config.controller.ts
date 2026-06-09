@@ -3,6 +3,87 @@ import { configService } from './config.service';
 import logger from '../../config/logger';
 
 export const configController = {
+  // ── Scoring Config ────────────────────────────────────────────────────────
+  async listAssessmentTypeConfigs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listAssessmentTypeConfigs();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List assessment type configs error');
+      next(error);
+    }
+  },
+
+  async updateAssessmentTypeConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.updateAssessmentTypeConfig(parseInt(req.params.id), req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update assessment type config error');
+      next(error);
+    }
+  },
+
+  async listAssessmentLevelConfigs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listAssessmentLevelConfigs();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List assessment level configs error');
+      next(error);
+    }
+  },
+
+  async updateAssessmentLevelConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.updateAssessmentLevelConfig(parseInt(req.params.id), req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update assessment level config error');
+      next(error);
+    }
+  },
+
+  async listAssessmentStatusConfigs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listAssessmentStatusConfigs();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List assessment status configs error');
+      next(error);
+    }
+  },
+
+  async updateAssessmentStatusConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.updateAssessmentStatusConfig(parseInt(req.params.id), req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update assessment status config error');
+      next(error);
+    }
+  },
+
+  async listAssessmentProjectConfigs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listAssessmentProjectConfigs();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List assessment project configs error');
+      next(error);
+    }
+  },
+
+  async updateAssessmentProjectConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.updateAssessmentProjectConfig(parseInt(req.params.id), req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update assessment project config error');
+      next(error);
+    }
+  },
+
   // ── Users ──────────────────────────────────────────────────────────────────
   async listUsers(req: Request, res: Response, next: NextFunction) {
     try {
@@ -281,6 +362,38 @@ export const configController = {
       res.json({ success: true });
     } catch (error) {
       logger.error({ error }, 'Delete domain grade weight error');
+      next(error);
+    }
+  },
+
+  // ── Competency Grade Thresholds ───────────────────────────────────────────
+  async listCompetencyGradeThresholds(req: Request, res: Response, next: NextFunction) {
+    try {
+      const departmentId = req.query.department_id ? parseInt(String(req.query.department_id)) : undefined;
+      const result = await configService.listCompetencyGradeThresholds(departmentId);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List competency grade thresholds error');
+      next(error);
+    }
+  },
+
+  async upsertCompetencyGradeThreshold(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.upsertCompetencyGradeThreshold(req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Upsert competency grade threshold error');
+      next(error);
+    }
+  },
+
+  async bulkUpsertCompetencyGradeThresholds(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.bulkUpsertCompetencyGradeThresholds(req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Bulk upsert competency grade thresholds error');
       next(error);
     }
   },

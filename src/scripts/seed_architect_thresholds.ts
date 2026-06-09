@@ -34,6 +34,21 @@ async function main() {
   });
   console.log(`Competencies: ${competencies.length}`);
 
+  const organization = await db.organization.upsert({
+    where: { slug: 'tkxel' },
+    update: { name: 'tkxel', logo_url: '/assets/organizations/tkxel-logo.svg', base_url: 'https://tkxel.com' },
+    create: { name: 'tkxel', slug: 'tkxel', logo_url: '/assets/organizations/tkxel-logo.svg', base_url: 'https://tkxel.com' },
+  });
+  const devOpsDepartment = await db.department.upsert({
+    where: { organization_id_name: { organization_id: organization.id, name: 'DevOps' } },
+    update: {},
+    create: {
+      organization_id: organization.id,
+      name: 'DevOps',
+      description: 'Default department for the current DevOps scoring data.',
+    },
+  });
+
   let inserted = 0;
   let skipped  = 0;
 
@@ -43,7 +58,13 @@ async function main() {
       const threshold = comp.name === 'Security and Performance' ? 0.95 : 1.0;
 
       const existing = await db.gradeMatrix.findUnique({
-        where: { grade_id_competency_id: { grade_id: grade.id, competency_id: comp.id } },
+        where: {
+          department_id_grade_id_competency_id: {
+            department_id: devOpsDepartment.id,
+            grade_id: grade.id,
+            competency_id: comp.id,
+          },
+        },
       });
 
       if (existing) {
@@ -52,7 +73,7 @@ async function main() {
       }
 
       await db.gradeMatrix.create({
-        data: { grade_id: grade.id, competency_id: comp.id, threshold },
+        data: { department_id: devOpsDepartment.id, grade_id: grade.id, competency_id: comp.id, threshold },
       });
       inserted++;
     }
