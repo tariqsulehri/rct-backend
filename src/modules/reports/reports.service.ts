@@ -44,6 +44,27 @@ async function loadDomainWeights(gradeIds: number[]): Promise<Map<number, Map<st
   return new Map();
 }
 
+async function loadGradeThresholds(
+  departmentIds: number[],
+  gradeIds: number[]
+): Promise<Map<string, Map<number, number>>> {
+  if (departmentIds.length === 0 || gradeIds.length === 0) return new Map();
+  const rows = await db.gradeMatrix.findMany({
+    where: {
+      department_id: { in: departmentIds },
+      grade_id: { in: gradeIds },
+    },
+    select: { department_id: true, grade_id: true, competency_id: true, threshold: true },
+  });
+  const result = new Map<string, Map<number, number>>();
+  for (const row of rows) {
+    const key = `${row.department_id}:${row.grade_id}`;
+    if (!result.has(key)) result.set(key, new Map());
+    result.get(key)!.set(row.competency_id, row.threshold);
+  }
+  return result;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface GapEntry {
@@ -78,12 +99,16 @@ export async function gapAnalysis(employeeId: number) {
   const storedMap = await getStoredCompScores([employeeId]);
   const compScoreMap = storedMap.get(employeeId) ?? new Map<number, number>();
 
-  // Fetch grade matrix thresholds for target grade
-  const gradeMatrices = await db.gradeMatrix.findMany({ where: { grade_id: employee.target_grade_id } });
+  // Fetch department-specific grade matrix thresholds for target grade
+  const gradeMatrices = employee.department_id
+    ? await db.gradeMatrix.findMany({
+        where: { department_id: employee.department_id, grade_id: employee.target_grade_id },
+      })
+    : [];
   const thresholdMap = new Map<number, number>(gradeMatrices.map((gm) => [gm.competency_id, gm.threshold]));
 
   const gaps: GapEntry[] = allCompetencies.map((comp) => {
-    const pd = getPrimaryDomain(comp.competency_domains);
+    const pd = getPrimaryDomain(comp.competency_domains, employee.department_id);
     const score = compScoreMap.get(comp.id) ?? 0;
     const threshold = thresholdMap.get(comp.id) ?? 0;
     const gap = Math.max(0, threshold - score);
@@ -112,7 +137,7 @@ export async function gapAnalysis(employeeId: number) {
   // overall_score: weighted by domain grade weights for the employee's target grade
   const domainWeightMap = await loadDomainWeights([employee.target_grade_id]);
   const gradeWeights = domainWeightMap.get(employee.target_grade_id);
-  const domainScores = buildDomainScores(compScoreMap, allCompetencies, domainNames);
+  const domainScores = buildDomainScores(compScoreMap, allCompetencies, domainNames, employee.department_id);
   const overall_score = weightedOverall(domainScores, gradeWeights);
 
   return {
@@ -180,9 +205,8 @@ export async function promotionReadiness(managerId: number, role: string) {
   const domainNames = allDomains.map((d) => d.name);
 
   const targetGradeIds = [...new Set(employees.map((e) => e.target_grade_id))];
-  const allGradeMatrices = await db.gradeMatrix.findMany({ where: { grade_id: { in: targetGradeIds } } });
-  const gradeThresholds = new Map<string, number>();
-  for (const gm of allGradeMatrices) gradeThresholds.set(`${gm.grade_id}:${gm.competency_id}`, gm.threshold);
+  const departmentIds = [...new Set(employees.map((e) => e.department_id).filter((id): id is number => id != null))];
+  const gradeThresholds = await loadGradeThresholds(departmentIds, targetGradeIds);
 
   const domainWeightMap = await loadDomainWeights(targetGradeIds);
 
@@ -195,12 +219,15 @@ export async function promotionReadiness(managerId: number, role: string) {
     const compScoreMap = storedScores.get(emp.id) ?? new Map<number, number>();
 
     // Domain scores = avg of scored competencies, weighted by grade
-    const domainScores = buildDomainScores(compScoreMap, allCompetencies, domainNames);
+    const domainScores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
     const overall_score = weightedOverall(domainScores, domainWeightMap.get(emp.target_grade_id));
 
     const thresholdMap = new Map<number, number>();
     for (const comp of allCompetencies) {
-      thresholdMap.set(comp.id, gradeThresholds.get(`${emp.target_grade_id}:${comp.id}`) ?? 0);
+      const thresholds = emp.department_id
+        ? gradeThresholds.get(`${emp.department_id}:${emp.target_grade_id}`)
+        : undefined;
+      thresholdMap.set(comp.id, thresholds?.get(comp.id) ?? 0);
     }
     const {
       averageThreshold: avg_threshold,
@@ -250,7 +277,7 @@ export async function competencyScores(managerId: number, role: string, _employe
 
   for (const emp of employees) {
     const compScoreMap = storedScores.get(emp.id) ?? new Map<number, number>();
-    const domain_scores = buildDomainScores(compScoreMap, allCompetencies, domainNames);
+    const domain_scores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
     const overall_score = weightedOverall(domain_scores, domainWeightMap.get(emp.target_grade_id));
 
     results.push({
@@ -323,7 +350,7 @@ export async function assessmentHistory(
     emp_code: a.employee.emp_code,
     technology_name: a.technology.name,
     competency_name: a.technology.competency.name,
-    domain_name: getPrimaryDomain(a.technology.competency.competency_domains).name,
+    domain_name: getPrimaryDomain(a.technology.competency.competency_domains, a.employee.department_id).name,
     type: a.type,
     projects: a.projects,
     score: Number(a.score),   // stored score — formula1 × levelWeight, 2 dp
@@ -368,10 +395,12 @@ export async function competencyMatrix(managerId: number, role: string, employee
     const competency_scores: Record<string, { score: number; domain: string; is_critical: boolean }> = {};
     for (const comp of orderedComps) {
       const score = compScoreMap.get(comp.id) ?? 0;
-      competency_scores[comp.name] = { score, domain: comp.domain_name, is_critical: comp.is_critical };
+      const source = allCompetencies.find((c) => c.id === comp.id);
+      const domain = source ? getPrimaryDomain(source.competency_domains, emp.department_id).name : comp.domain_name;
+      competency_scores[comp.name] = { score, domain, is_critical: comp.is_critical };
     }
 
-    const domain_scores = buildDomainScores(compScoreMap, allCompetencies, domainNames);
+    const domain_scores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
     const overall_score = weightedOverall(domain_scores, domainWeightMap.get(emp.target_grade_id));
 
     results.push({
@@ -409,13 +438,6 @@ export async function gapMatrix(managerId: number, role: string, employeeId?: nu
     include: { competency_domains: { include: { domain: true } } },
   });
 
-  const allMatrices = await db.gradeMatrix.findMany();
-  const matrixMap = new Map<number, Map<number, number>>();
-  for (const gm of allMatrices) {
-    if (!matrixMap.has(gm.grade_id)) matrixMap.set(gm.grade_id, new Map());
-    matrixMap.get(gm.grade_id)!.set(gm.competency_id, gm.threshold);
-  }
-
   const allDomains = await db.skillDomain.findMany({ orderBy: { name: 'asc' } });
   const domainNames = allDomains.map((d) => d.name);
 
@@ -427,6 +449,8 @@ export async function gapMatrix(managerId: number, role: string, employeeId?: nu
     .sort((a, b) => a.domain.localeCompare(b.domain) || a.name.localeCompare(b.name));
 
   const targetGradeIds = [...new Set(employees.map((e) => e.target_grade_id))];
+  const departmentIds = [...new Set(employees.map((e) => e.department_id).filter((id): id is number => id != null))];
+  const matrixMap = await loadGradeThresholds(departmentIds, targetGradeIds);
   const domainWeightMap = await loadDomainWeights(targetGradeIds);
   const storedScores = await getStoredCompScores(employeeIds);
 
@@ -441,7 +465,9 @@ export async function gapMatrix(managerId: number, role: string, employeeId?: nu
 
   for (const emp of employees) {
     const compScoreMap = storedScores.get(emp.id) ?? new Map<number, number>();
-    const thresholds = matrixMap.get(emp.target_grade_id) ?? new Map<number, number>();
+    const thresholds = emp.department_id
+      ? matrixMap.get(`${emp.department_id}:${emp.target_grade_id}`) ?? new Map<number, number>()
+      : new Map<number, number>();
 
     // Competency gaps
     const competency_gaps: Record<string, {
@@ -450,7 +476,9 @@ export async function gapMatrix(managerId: number, role: string, employeeId?: nu
     for (const comp of orderedComps) {
       const score = compScoreMap.get(comp.id) ?? 0;
       const threshold = thresholds.get(comp.id) ?? 0;
-      competency_gaps[comp.name] = { score, threshold, gap: score - threshold, domain: comp.domain, is_critical: comp.is_critical, meets: score >= threshold };
+      const source = allCompetencies.find((c) => c.id === comp.id);
+      const domain = source ? getPrimaryDomain(source.competency_domains, emp.department_id).name : comp.domain;
+      competency_gaps[comp.name] = { score, threshold, gap: score - threshold, domain, is_critical: comp.is_critical, meets: score >= threshold };
     }
 
     // Domain gaps = avg over competencies in that domain
@@ -458,7 +486,7 @@ export async function gapMatrix(managerId: number, role: string, employeeId?: nu
     for (const dn of domainNames) domainAcc.set(dn, { scoreSum: 0, threshSum: 0, count: 0 });
     for (const comp of orderedComps) {
       const cg = competency_gaps[comp.name];
-      const acc = domainAcc.get(comp.domain);
+      const acc = domainAcc.get(cg.domain);
       if (!acc) continue;
       if (cg.threshold > 0 || cg.score > 0) {
         acc.scoreSum += cg.score;
@@ -477,7 +505,7 @@ export async function gapMatrix(managerId: number, role: string, employeeId?: nu
 
     const gradeWeights = domainWeightMap.get(emp.target_grade_id);
     // overall_score: use buildDomainScores (consistent with all other report functions)
-    const domainScoresForOverall = buildDomainScores(compScoreMap, allCompetencies, domainNames);
+    const domainScoresForOverall = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
     const overall_score = weightedOverall(domainScoresForOverall, gradeWeights);
     // overall_threshold: weighted avg of domain thresholds (only domains with threshold > 0)
     const thresholdRecord: Record<string, number> = Object.fromEntries(
@@ -528,7 +556,7 @@ export async function skillsSummary(managerId: number, role: string, employeeId?
 
   for (const emp of employees) {
     const compScoreMap = storedScores.get(emp.id) ?? new Map<number, number>();
-    const domain_scores = buildDomainScores(compScoreMap, allCompetencies, domainNames);
+    const domain_scores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
     const final_score = weightedOverall(domain_scores, domainWeightMap.get(emp.target_grade_id));
 
     results.push({

@@ -3,7 +3,7 @@ import { configService } from './config.service';
 import logger from '../../config/logger';
 
 export const configController = {
-  // ── Assessment Types ──────────────────────────────────────────────────────
+  // ── Scoring Config ────────────────────────────────────────────────────────
   async listAssessmentTypeConfigs(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await configService.listAssessmentTypeConfigs();
@@ -16,8 +16,7 @@ export const configController = {
 
   async updateAssessmentTypeConfig(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
-      const result = await configService.updateAssessmentTypeConfig(id, req.body);
+      const result = await configService.updateAssessmentTypeConfig(parseInt(req.params.id), req.body);
       res.json({ success: true, data: result });
     } catch (error) {
       logger.error({ error }, 'Update assessment type config error');
@@ -37,8 +36,7 @@ export const configController = {
 
   async updateAssessmentLevelConfig(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
-      const result = await configService.updateAssessmentLevelConfig(id, req.body);
+      const result = await configService.updateAssessmentLevelConfig(parseInt(req.params.id), req.body);
       res.json({ success: true, data: result });
     } catch (error) {
       logger.error({ error }, 'Update assessment level config error');
@@ -58,8 +56,7 @@ export const configController = {
 
   async updateAssessmentStatusConfig(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
-      const result = await configService.updateAssessmentStatusConfig(id, req.body);
+      const result = await configService.updateAssessmentStatusConfig(parseInt(req.params.id), req.body);
       res.json({ success: true, data: result });
     } catch (error) {
       logger.error({ error }, 'Update assessment status config error');
@@ -79,8 +76,7 @@ export const configController = {
 
   async updateAssessmentProjectConfig(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
-      const result = await configService.updateAssessmentProjectConfig(id, req.body);
+      const result = await configService.updateAssessmentProjectConfig(parseInt(req.params.id), req.body);
       res.json({ success: true, data: result });
     } catch (error) {
       logger.error({ error }, 'Update assessment project config error');
@@ -366,6 +362,38 @@ export const configController = {
       res.json({ success: true });
     } catch (error) {
       logger.error({ error }, 'Delete domain grade weight error');
+      next(error);
+    }
+  },
+
+  // ── Competency Grade Thresholds ───────────────────────────────────────────
+  async listCompetencyGradeThresholds(req: Request, res: Response, next: NextFunction) {
+    try {
+      const departmentId = req.query.department_id ? parseInt(String(req.query.department_id)) : undefined;
+      const result = await configService.listCompetencyGradeThresholds(departmentId);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List competency grade thresholds error');
+      next(error);
+    }
+  },
+
+  async upsertCompetencyGradeThreshold(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.upsertCompetencyGradeThreshold(req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Upsert competency grade threshold error');
+      next(error);
+    }
+  },
+
+  async bulkUpsertCompetencyGradeThresholds(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.bulkUpsertCompetencyGradeThresholds(req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Bulk upsert competency grade thresholds error');
       next(error);
     }
   },

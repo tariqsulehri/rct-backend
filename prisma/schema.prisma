@@ -41,7 +41,6 @@ model SkillDomain {
   department_weights DepartmentDomainWeight[]
   competency_domains CompetencyDomainMap[]
   grade_weights      SkillDomainGradeWeight[]
-  skill_assessments  SkillAssessment[]
 
   @@map("skill_domains")
 }
@@ -74,16 +73,19 @@ model CompetencyCategory {
 
 model CompetencyDomainMap {
   id            Int @id @default(autoincrement())
+  department_id Int
   competency_id Int
   domain_id     Int
 
   is_primary Boolean  @default(false) // Primary domain for this competency (for reporting)
   created_at DateTime @default(now())
 
+  department Department  @relation(fields: [department_id], references: [id], onDelete: Cascade)
   competency Competency  @relation("CompetencyToDomains", fields: [competency_id], references: [id], onDelete: Cascade)
   domain     SkillDomain @relation(fields: [domain_id], references: [id], onDelete: Cascade)
 
-  @@unique([competency_id, domain_id])
+  @@unique([department_id, competency_id, domain_id])
+  @@index([department_id])
   @@index([competency_id])
   @@index([domain_id])
   @@map("competency_domain_maps")
@@ -106,7 +108,6 @@ model Competency {
   technologies      Technology[]
   grade_matrices    GradeMatrix[]
   competency_scores CompetencyScore[]
-  skill_assessments SkillAssessment[]
 
   @@index([category_id])
   @@map("competencies")
@@ -139,14 +140,14 @@ model Technology {
 }
 
 model AssessmentTypeConfig {
-  id           Int      @id @default(autoincrement())
-  code         String   @unique
-  label        String
-  weight       Float    @default(0)
-  description  String?
-  sort_order   Int      @default(0)
-  is_active    Boolean  @default(true)
-  updated_at   DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  label       String
+  weight      Float    @default(0)
+  description String?
+  sort_order  Int      @default(0)
+  is_active   Boolean  @default(true)
+  updated_at  DateTime @updatedAt
 
   @@map("assessment_type_configs")
 }
@@ -202,12 +203,12 @@ model Department {
   description     String?
   created_at      DateTime @default(now())
 
-  organization      Organization             @relation(fields: [organization_id], references: [id], onDelete: Restrict)
-  employees         Employee[]
-  config            DepartmentConfig?
-  domain_weights    DepartmentDomainWeight[]
-  skill_assessments SkillAssessment[]
-  competency_scores CompetencyScore[]
+  organization   Organization             @relation(fields: [organization_id], references: [id], onDelete: Restrict)
+  employees      Employee[]
+  config         DepartmentConfig?
+  domain_weights DepartmentDomainWeight[]
+  grade_matrices GradeMatrix[]
+  competency_domain_maps CompetencyDomainMap[]
 
   @@unique([organization_id, name])
   @@index([organization_id])
@@ -232,10 +233,10 @@ model Organization {
 model DepartmentConfig {
   id                      Int      @id @default(autoincrement())
   department_id           Int      @unique
-  // Department scoring values used by the assessment formula.
-  primary_weight          Float    @default(0.25)
-  secondary_weight        Float    @default(0.15)
-  tertiary_weight         Float    @default(0.10)
+  // Scoring formula weights — must sum to 1.0
+  primary_weight          Float    @default(0.5)
+  secondary_weight        Float    @default(0.3)
+  tertiary_weight         Float    @default(0.2)
   // Grade matrix: use global by default, department override optional
   use_custom_grade_matrix Boolean  @default(false)
   notes                   String?
@@ -266,15 +267,18 @@ model DepartmentDomainWeight {
 
 model GradeMatrix {
   id            Int @id @default(autoincrement())
+  department_id Int
   grade_id      Int
   competency_id Int
 
   threshold Float // Required score [0.0-1.0] for this grade
 
+  department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
   grade      Grade      @relation(fields: [grade_id], references: [id], onDelete: Cascade)
   competency Competency @relation(fields: [competency_id], references: [id], onDelete: Cascade)
 
-  @@unique([grade_id, competency_id])
+  @@unique([department_id, grade_id, competency_id])
+  @@index([department_id])
   @@index([grade_id])
   @@index([competency_id])
   @@map("competency_grade_thresholds")
@@ -374,11 +378,8 @@ model Employee {
 }
 
 model SkillAssessment {
-  id            Int  @id @default(autoincrement())
+  id            Int @id @default(autoincrement())
   employee_id   Int
-  department_id Int?
-  domain_id     Int?
-  competency_id Int?
   technology_id Int
 
   type     String // 'Primary' | 'Secondary' | 'Tertiary'
@@ -391,17 +392,11 @@ model SkillAssessment {
   assessed_at DateTime @default(now())
   updated_at  DateTime @updatedAt
 
-  employee   Employee     @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  department Department?  @relation(fields: [department_id], references: [id], onDelete: SetNull)
-  domain     SkillDomain? @relation(fields: [domain_id], references: [id], onDelete: SetNull)
-  competency Competency?  @relation(fields: [competency_id], references: [id], onDelete: SetNull)
-  technology Technology   @relation(fields: [technology_id], references: [id], onDelete: Cascade)
+  employee   Employee   @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  technology Technology @relation(fields: [technology_id], references: [id], onDelete: Cascade)
 
   @@unique([employee_id, technology_id]) // one assessment per employee per technology
   @@index([employee_id])
-  @@index([department_id])
-  @@index([domain_id])
-  @@index([competency_id])
   @@index([technology_id])
   @@map("skill_assessments")
 }
@@ -411,9 +406,8 @@ model SkillAssessment {
 // ============================================================================
 
 model CompetencyScore {
-  id            Int  @id @default(autoincrement())
+  id            Int @id @default(autoincrement())
   employee_id   Int
-  department_id Int?
   competency_id Int
 
   score       Float? // [0.0-1.0] or NULL
@@ -422,13 +416,11 @@ model CompetencyScore {
 
   updated_at DateTime @updatedAt
 
-  employee   Employee    @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  department Department? @relation(fields: [department_id], references: [id], onDelete: SetNull)
-  competency Competency  @relation(fields: [competency_id], references: [id], onDelete: Cascade)
+  employee   Employee   @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competency_id], references: [id], onDelete: Cascade)
 
   @@unique([employee_id, competency_id])
   @@index([employee_id])
-  @@index([department_id])
   @@index([competency_id])
   @@map("competency_scores")
 }

@@ -27,6 +27,8 @@ import {
   createCompetencyCategorySchema,
   updateCompetencyCategorySchema,
   upsertDomainGradeWeightSchema,
+  upsertCompetencyGradeThresholdSchema,
+  bulkUpsertCompetencyGradeThresholdsSchema,
 } from './config.schema';
 
 const router = Router();
@@ -34,14 +36,17 @@ const router = Router();
 // All config routes require authentication
 router.use(authenticate);
 
-// ── Assessment Types (ADMIN only) ────────────────────────────────────────────
-router.get('/assessment-types', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), configController.listAssessmentTypeConfigs);
+// ── Scoring Config (ADMIN only) ──────────────────────────────────────────────
+router.get('/assessment-types', requireRole('ADMIN'), configController.listAssessmentTypeConfigs);
 router.patch('/assessment-types/:id', requireRole('ADMIN'), validate(updateAssessmentTypeConfigSchema), configController.updateAssessmentTypeConfig);
-router.get('/assessment-levels', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), configController.listAssessmentLevelConfigs);
+
+router.get('/assessment-levels', requireRole('ADMIN'), configController.listAssessmentLevelConfigs);
 router.patch('/assessment-levels/:id', requireRole('ADMIN'), validate(updateAssessmentLevelConfigSchema), configController.updateAssessmentLevelConfig);
-router.get('/assessment-statuses', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), configController.listAssessmentStatusConfigs);
+
+router.get('/assessment-statuses', requireRole('ADMIN'), configController.listAssessmentStatusConfigs);
 router.patch('/assessment-statuses/:id', requireRole('ADMIN'), validate(updateAssessmentStatusConfigSchema), configController.updateAssessmentStatusConfig);
-router.get('/assessment-projects', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), configController.listAssessmentProjectConfigs);
+
+router.get('/assessment-projects', requireRole('ADMIN'), configController.listAssessmentProjectConfigs);
 router.patch('/assessment-projects/:id', requireRole('ADMIN'), validate(updateAssessmentProjectConfigSchema), configController.updateAssessmentProjectConfig);
 
 // ── Departments (ADMIN only) ──────────────────────────────────────────────────
@@ -50,7 +55,7 @@ router.post('/departments', requireRole('ADMIN'), validate(createDepartmentSchem
 router.patch('/departments/:id', requireRole('ADMIN'), validate(updateDepartmentSchema), configController.updateDepartment);
 router.delete('/departments/:id', requireRole('ADMIN'), configController.deleteDepartment);
 
-// Department config (scoring values + domain weights)
+// Department config (formula weights + domain weights)
 router.get('/departments/:id/config', requireRole('ADMIN'), configController.getDepartmentConfig);
 router.put('/departments/:id/config', requireRole('ADMIN'), validate(upsertDepartmentConfigSchema), configController.upsertDepartmentConfig);
 router.put('/departments/:id/domain-weights', requireRole('ADMIN'), validate(bulkUpsertDomainWeightsSchema), configController.upsertDepartmentDomainWeights);
@@ -83,6 +88,11 @@ router.delete('/skill-domains/:id', requireRole('ADMIN'), configController.delet
 router.get('/domain-grade-weights', requireRole('ADMIN'), configController.listDomainGradeWeights);
 router.post('/domain-grade-weights', requireRole('ADMIN'), validate(upsertDomainGradeWeightSchema), configController.upsertDomainGradeWeight);
 router.delete('/domain-grade-weights/:id', requireRole('ADMIN'), configController.deleteDomainGradeWeight);
+
+// ── Department Skill Thresholds (ADMIN only) ─────────────────────────────────
+router.get('/competency-grade-thresholds', requireRole('ADMIN'), configController.listCompetencyGradeThresholds);
+router.post('/competency-grade-thresholds', requireRole('ADMIN'), validate(upsertCompetencyGradeThresholdSchema), configController.upsertCompetencyGradeThreshold);
+router.put('/competency-grade-thresholds/bulk', requireRole('ADMIN'), validate(bulkUpsertCompetencyGradeThresholdsSchema), configController.bulkUpsertCompetencyGradeThresholds);
 
 // ── Competencies (ADMIN only) ─────────────────────────────────────────────────
 router.get('/competencies', requireRole('ADMIN'), configController.listCompetencies);
