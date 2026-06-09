@@ -20,6 +20,10 @@ import {
   updateDepartmentSchema,
   upsertDepartmentConfigSchema,
   bulkUpsertDomainWeightsSchema,
+  updateAssessmentTypeConfigSchema,
+  updateAssessmentLevelConfigSchema,
+  updateAssessmentStatusConfigSchema,
+  updateAssessmentProjectConfigSchema,
   createCompetencyCategorySchema,
   updateCompetencyCategorySchema,
   upsertDomainGradeWeightSchema,
@@ -30,13 +34,23 @@ const router = Router();
 // All config routes require authentication
 router.use(authenticate);
 
+// ── Assessment Types (ADMIN only) ────────────────────────────────────────────
+router.get('/assessment-types', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), configController.listAssessmentTypeConfigs);
+router.patch('/assessment-types/:id', requireRole('ADMIN'), validate(updateAssessmentTypeConfigSchema), configController.updateAssessmentTypeConfig);
+router.get('/assessment-levels', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), configController.listAssessmentLevelConfigs);
+router.patch('/assessment-levels/:id', requireRole('ADMIN'), validate(updateAssessmentLevelConfigSchema), configController.updateAssessmentLevelConfig);
+router.get('/assessment-statuses', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), configController.listAssessmentStatusConfigs);
+router.patch('/assessment-statuses/:id', requireRole('ADMIN'), validate(updateAssessmentStatusConfigSchema), configController.updateAssessmentStatusConfig);
+router.get('/assessment-projects', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), configController.listAssessmentProjectConfigs);
+router.patch('/assessment-projects/:id', requireRole('ADMIN'), validate(updateAssessmentProjectConfigSchema), configController.updateAssessmentProjectConfig);
+
 // ── Departments (ADMIN only) ──────────────────────────────────────────────────
 router.get('/departments', requireRole('ADMIN'), configController.listDepartments);
 router.post('/departments', requireRole('ADMIN'), validate(createDepartmentSchema), configController.createDepartment);
 router.patch('/departments/:id', requireRole('ADMIN'), validate(updateDepartmentSchema), configController.updateDepartment);
 router.delete('/departments/:id', requireRole('ADMIN'), configController.deleteDepartment);
 
-// Department config (formula weights + domain weights)
+// Department config (scoring values + domain weights)
 router.get('/departments/:id/config', requireRole('ADMIN'), configController.getDepartmentConfig);
 router.put('/departments/:id/config', requireRole('ADMIN'), validate(upsertDepartmentConfigSchema), configController.upsertDepartmentConfig);
 router.put('/departments/:id/domain-weights', requireRole('ADMIN'), validate(bulkUpsertDomainWeightsSchema), configController.upsertDepartmentDomainWeights);

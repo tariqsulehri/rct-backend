@@ -27,18 +27,18 @@ describe('config schemas', () => {
     expect(result.success).toBe(false);
   });
 
-  it('accepts department scoring weights in range', () => {
+  it('accepts department scoring values in range', () => {
     const result = upsertDepartmentConfigSchema.safeParse({
-      primary_weight: 0.5,
-      secondary_weight: 0.3,
-      tertiary_weight: 0.2,
-      notes: 'Default scoring weights',
+      primary_weight: 0.25,
+      secondary_weight: 0.15,
+      tertiary_weight: 0.10,
+      notes: 'Default scoring values',
     });
 
     expect(result.success).toBe(true);
   });
 
-  it('rejects department scoring weights outside range', () => {
+  it('rejects department scoring values outside range', () => {
     const result = upsertDepartmentConfigSchema.safeParse({
       primary_weight: 1.2,
       secondary_weight: 0.3,
@@ -59,4 +59,3 @@ describe('config schemas', () => {
     expect(result.success).toBe(true);
   });
 });
-

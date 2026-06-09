@@ -1,8 +1,11 @@
-export interface FormulaWeights {
+export interface ScoringValues {
   primary: number;
   secondary: number;
   tertiary: number;
 }
+
+export type LevelWeights = Record<string, number>;
+export type ProjectCredits = Record<number, number>;
 
 export interface AssessmentScoreInput {
   type: string;
@@ -17,7 +20,7 @@ export interface CompetencyScoreResult {
   levelLabel: string;
 }
 
-export const DEFAULT_FORMULA_WEIGHTS: FormulaWeights = {
+export const DEFAULT_SCORING_VALUES: ScoringValues = {
   primary: 0.25,
   secondary: 0.15,
   tertiary: 0.10,
@@ -41,19 +44,22 @@ export function computeAssessmentScore(
   type: string,
   projects: number,
   level: string,
-  weights: FormulaWeights = DEFAULT_FORMULA_WEIGHTS,
+  scoringValues: ScoringValues = DEFAULT_SCORING_VALUES,
+  levelWeights: LevelWeights = LEVEL_WEIGHT,
+  projectCredits: ProjectCredits = {},
 ): number {
   // The scoring model intentionally gives base credit for an assessed skill,
   // then adds project experience up to the supported 3-project cap.
   const projectCount = Math.min(Math.max(projects, 0), 3);
-  const coefficient =
+  const projectCredit = projectCredits[projectCount] ?? (projectCount / 3);
+  const scoringValue =
     type === 'Primary'
-      ? weights.primary
+      ? scoringValues.primary
       : type === 'Secondary'
-        ? weights.secondary
-        : weights.tertiary;
-  const baseScore = (coefficient * projectCount / 3) + coefficient;
-  const levelWeight = LEVEL_WEIGHT[level] ?? 0;
+        ? scoringValues.secondary
+        : scoringValues.tertiary;
+  const baseScore = (scoringValue * projectCredit) + scoringValue;
+  const levelWeight = levelWeights[level] ?? LEVEL_WEIGHT[level] ?? 0;
 
   return roundScore(baseScore * levelWeight);
 }
@@ -77,15 +83,17 @@ export function scoreToLevelLabel(score: number): string {
 
 export function computeCompetencyScore(
   assessments: AssessmentScoreInput[],
-  weights: FormulaWeights = DEFAULT_FORMULA_WEIGHTS,
+  scoringValues: ScoringValues = DEFAULT_SCORING_VALUES,
+  levelWeights: LevelWeights = LEVEL_WEIGHT,
+  projectCredits: ProjectCredits = {},
 ): CompetencyScoreResult {
   const totalScore = assessments.reduce((sum, assessment) => {
     const storedScore = Number(assessment.storedScore);
     // Prefer the persisted row score so historical assessments keep the
-    // formula weights that were active when they were saved.
+    // scoring values that were active when they were saved.
     const assessmentScore = storedScore !== 0 && Number.isFinite(storedScore)
       ? storedScore
-      : computeAssessmentScore(assessment.type, assessment.projects, assessment.level, weights);
+      : computeAssessmentScore(assessment.type, assessment.projects, assessment.level, scoringValues, levelWeights, projectCredits);
 
     return sum + assessmentScore;
   }, 0);

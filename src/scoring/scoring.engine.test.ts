@@ -6,7 +6,7 @@ import {
 } from './scoring.engine';
 
 describe('scoring engine', () => {
-  it('computes assessment scores using type, projects, and level weights', () => {
+  it('computes assessment scores using type, projects, and level scoring values', () => {
     expect(computeAssessmentScore('Primary', 3, 'Expert')).toBe(0.5);
     expect(computeAssessmentScore('Secondary', 3, 'Advanced')).toBe(0.24);
     expect(computeAssessmentScore('Tertiary', 3, 'Awareness')).toBe(0.04);
@@ -17,11 +17,11 @@ describe('scoring engine', () => {
     expect(computeAssessmentScore('Primary', 4, 'Expert')).toBe(0.5);
   });
 
-  it('uses department-specific formula weights when provided', () => {
-    const weights = { primary: 0.5, secondary: 0.3, tertiary: 0.2 };
+  it('uses department-specific scoring values when provided', () => {
+    const scoringValues = { primary: 0.5, secondary: 0.3, tertiary: 0.2 };
 
-    expect(computeAssessmentScore('Primary', 3, 'Expert', weights)).toBe(1);
-    expect(computeAssessmentScore('Secondary', 0, 'Proficient', weights)).toBe(0.18);
+    expect(computeAssessmentScore('Primary', 3, 'Expert', scoringValues)).toBe(1);
+    expect(computeAssessmentScore('Secondary', 0, 'Proficient', scoringValues)).toBe(0.18);
   });
 
   it('maps competency scores to star ratings at current thresholds', () => {
@@ -65,4 +65,3 @@ describe('scoring engine', () => {
     });
   });
 });
-

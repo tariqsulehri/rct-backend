@@ -69,6 +69,49 @@ export type UpdateCompetencyInput = z.infer<typeof updateCompetencySchema>;
 export type CreateTechnologyInput = z.infer<typeof createTechnologySchema>;
 export type UpdateTechnologyInput = z.infer<typeof updateTechnologySchema>;
 
+export const updateAssessmentTypeConfigSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+  weight: z.number().min(0).max(1).optional(),
+  description: z.string().nullable().optional(),
+  sort_order: z.number().int().min(0).optional(),
+  is_active: z.boolean().optional(),
+});
+
+export type UpdateAssessmentTypeConfigInput = z.infer<typeof updateAssessmentTypeConfigSchema>;
+
+export const updateAssessmentLevelConfigSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+  weight: z.number().min(0).max(1).optional(),
+  threshold: z.number().min(0).max(1).nullable().optional(),
+  description: z.string().nullable().optional(),
+  sort_order: z.number().int().min(0).optional(),
+  is_active: z.boolean().optional(),
+});
+
+export const updateAssessmentStatusConfigSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+  description: z.string().nullable().optional(),
+  counts_toward_score: z.boolean().optional(),
+  is_terminal: z.boolean().optional(),
+  sort_order: z.number().int().min(0).optional(),
+  is_active: z.boolean().optional(),
+});
+
+export const updateAssessmentProjectConfigSchema = z.object({
+  label: z.string().min(1).max(100).optional(),
+  description: z.string().nullable().optional(),
+  duration_months_min: z.number().int().min(0).nullable().optional(),
+  duration_months_max: z.number().int().min(0).nullable().optional(),
+  credit: z.number().min(0).max(1).optional(),
+  threshold: z.number().min(0).max(1).nullable().optional(),
+  sort_order: z.number().int().min(0).optional(),
+  is_active: z.boolean().optional(),
+});
+
+export type UpdateAssessmentLevelConfigInput = z.infer<typeof updateAssessmentLevelConfigSchema>;
+export type UpdateAssessmentStatusConfigInput = z.infer<typeof updateAssessmentStatusConfigSchema>;
+export type UpdateAssessmentProjectConfigInput = z.infer<typeof updateAssessmentProjectConfigSchema>;
+
 export const createCompetencyCategorySchema = z.object({
   name:        z.string().min(1).max(100),
   description: z.string().optional(),
@@ -88,7 +131,7 @@ export const updateDepartmentSchema = createDepartmentSchema.partial();
 export type CreateDepartmentInput = z.infer<typeof createDepartmentSchema>;
 export type UpdateDepartmentInput = z.infer<typeof updateDepartmentSchema>;
 
-// Department Config (formula weights + domain overrides)
+// Department Config (scoring values + domain overrides)
 export const upsertDepartmentConfigSchema = z.object({
   primary_weight:   z.number().min(0).max(1),
   secondary_weight: z.number().min(0).max(1),

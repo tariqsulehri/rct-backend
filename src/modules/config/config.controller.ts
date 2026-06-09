@@ -3,6 +3,91 @@ import { configService } from './config.service';
 import logger from '../../config/logger';
 
 export const configController = {
+  // ── Assessment Types ──────────────────────────────────────────────────────
+  async listAssessmentTypeConfigs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listAssessmentTypeConfigs();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List assessment type configs error');
+      next(error);
+    }
+  },
+
+  async updateAssessmentTypeConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id);
+      const result = await configService.updateAssessmentTypeConfig(id, req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update assessment type config error');
+      next(error);
+    }
+  },
+
+  async listAssessmentLevelConfigs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listAssessmentLevelConfigs();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List assessment level configs error');
+      next(error);
+    }
+  },
+
+  async updateAssessmentLevelConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id);
+      const result = await configService.updateAssessmentLevelConfig(id, req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update assessment level config error');
+      next(error);
+    }
+  },
+
+  async listAssessmentStatusConfigs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listAssessmentStatusConfigs();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List assessment status configs error');
+      next(error);
+    }
+  },
+
+  async updateAssessmentStatusConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id);
+      const result = await configService.updateAssessmentStatusConfig(id, req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update assessment status config error');
+      next(error);
+    }
+  },
+
+  async listAssessmentProjectConfigs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listAssessmentProjectConfigs();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List assessment project configs error');
+      next(error);
+    }
+  },
+
+  async updateAssessmentProjectConfig(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id);
+      const result = await configService.updateAssessmentProjectConfig(id, req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update assessment project config error');
+      next(error);
+    }
+  },
+
   // ── Users ──────────────────────────────────────────────────────────────────
   async listUsers(req: Request, res: Response, next: NextFunction) {
     try {

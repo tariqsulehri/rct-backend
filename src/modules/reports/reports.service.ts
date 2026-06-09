@@ -10,12 +10,12 @@ import {
 } from '../../scoring/reporting.engine';
 
 // ── Canonical scoring architecture ───────────────────────────────────────────
-// skill_assessments.score  = formula1(type, projects, weights) × levelWeight   (stored per row)
+// skill_assessments.score  = formula1(type, projects, scoring values) × levelWeight   (stored per row)
 // competency_scores.score  = SUM(skill_assessments.score)  per employee+competency  (stored)
 // All reports READ from competency_scores — never recalculate from raw assessments.
 // Domain score  = AVG of scored competencies in that domain
-// Overall score = weighted AVG of scored domains using skill_domain_grade_weights for target grade
-//                 Falls back to equal weight for domains with no configured weight.
+// Overall score = equal AVG of scored domains for now. Grade readiness is driven
+// by competency_grade_thresholds via the GradeMatrix Prisma model.
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -39,22 +39,9 @@ async function getStoredCompScores(
   return result;
 }
 
-/**
- * Load domain weights for a set of grade IDs from skill_domain_grade_weights.
- * Returns Map<gradeId, Map<domainName, weight>>
- */
 async function loadDomainWeights(gradeIds: number[]): Promise<Map<number, Map<string, number>>> {
-  if (gradeIds.length === 0) return new Map();
-  const rows = await db.skillDomainGradeWeight.findMany({
-    where: { grade_id: { in: gradeIds } },
-    include: { domain: { select: { name: true } } },
-  });
-  const result = new Map<number, Map<string, number>>();
-  for (const row of rows) {
-    if (!result.has(row.grade_id)) result.set(row.grade_id, new Map());
-    result.get(row.grade_id)!.set(row.domain.name, row.weight);
-  }
-  return result;
+  void gradeIds;
+  return new Map();
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────

@@ -17,10 +17,65 @@ import {
   UpdateDepartmentInput,
   UpsertDepartmentConfigInput,
   BulkUpsertDomainWeightsInput,
+  UpdateAssessmentTypeConfigInput,
+  UpdateAssessmentLevelConfigInput,
+  UpdateAssessmentStatusConfigInput,
+  UpdateAssessmentProjectConfigInput,
   CreateCompetencyCategoryInput,
   UpdateCompetencyCategoryInput,
   UpsertDomainGradeWeightInput,
 } from './config.schema';
+
+const DEFAULT_ASSESSMENT_TYPE_CONFIGS = [
+  {
+    code: 'Primary',
+    label: 'Primary',
+    weight: 0.25,
+    description: 'Main technology for the competency. Gives highest credit.',
+    sort_order: 1,
+    is_active: true,
+  },
+  {
+    code: 'Secondary',
+    label: 'Secondary',
+    weight: 0.15,
+    description: 'Supporting technology. Gives medium credit.',
+    sort_order: 2,
+    is_active: true,
+  },
+  {
+    code: 'Tertiary',
+    label: 'Tertiary',
+    weight: 0.10,
+    description: 'Related technology. Gives lower credit.',
+    sort_order: 3,
+    is_active: true,
+  },
+];
+
+const DEFAULT_ASSESSMENT_LEVEL_CONFIGS = [
+  { code: 'Expert', label: 'Expert', weight: 1.00, threshold: 0.80, description: 'Deep independent ownership and expert-level execution.', sort_order: 1, is_active: true },
+  { code: 'Advanced', label: 'Advanced', weight: 0.80, threshold: 0.60, description: 'Strong practical skill with limited guidance needed.', sort_order: 2, is_active: true },
+  { code: 'Proficient', label: 'Proficient', weight: 0.60, threshold: 0.40, description: 'Working proficiency for delivery tasks.', sort_order: 3, is_active: true },
+  { code: 'Foundational', label: 'Foundational', weight: 0.40, threshold: 0.20, description: 'Basic working understanding with support needed.', sort_order: 4, is_active: true },
+  { code: 'Beginner', label: 'Beginner', weight: 0.40, threshold: 0.20, description: 'Early-stage skill exposure.', sort_order: 5, is_active: true },
+  { code: 'Awareness', label: 'Awareness', weight: 0.20, threshold: 0.01, description: 'Conceptual awareness or light exposure.', sort_order: 6, is_active: true },
+  { code: 'Unset', label: 'Unset', weight: 0.00, threshold: 0.00, description: 'No level selected yet.', sort_order: 7, is_active: true },
+];
+
+const DEFAULT_ASSESSMENT_STATUS_CONFIGS = [
+  { code: 'approved', label: 'Approved', description: 'Manager-approved assessment. Counts toward competency and report scores.', counts_toward_score: true, is_terminal: true, sort_order: 1, is_active: true },
+  { code: 'pending', label: 'Pending', description: 'Submitted assessment waiting for manager approval. Does not count toward scores.', counts_toward_score: false, is_terminal: false, sort_order: 2, is_active: true },
+  { code: 'rejected', label: 'Rejected', description: 'Assessment rejected during review. Does not count toward scores.', counts_toward_score: false, is_terminal: true, sort_order: 3, is_active: true },
+  { code: 'draft', label: 'Draft', description: 'Unsubmitted or in-progress assessment. Does not count toward scores.', counts_toward_score: false, is_terminal: false, sort_order: 4, is_active: true },
+];
+
+const DEFAULT_ASSESSMENT_PROJECT_CONFIGS = [
+  { project_count: 0, label: '0 projects', description: 'No project delivery experience yet.', duration_months_min: 0, duration_months_max: 0, credit: 0, threshold: 0, sort_order: 1, is_active: true },
+  { project_count: 1, label: '1 project', description: 'Used in at least one real project.', duration_months_min: 1, duration_months_max: 3, credit: 1 / 3, threshold: 0.25, sort_order: 2, is_active: true },
+  { project_count: 2, label: '2 projects', description: 'Used across two real projects.', duration_months_min: 3, duration_months_max: 6, credit: 2 / 3, threshold: 0.50, sort_order: 3, is_active: true },
+  { project_count: 3, label: '3+ projects', description: 'Used in three or more real projects. This is the scoring cap.', duration_months_min: 6, duration_months_max: null, credit: 1, threshold: 0.75, sort_order: 4, is_active: true },
+];
 
 const DEFAULT_ORGANIZATION = {
   name: 'tkxel',
@@ -39,6 +94,91 @@ async function getDefaultOrganizationId(): Promise<number> {
 }
 
 export const configService = {
+  // ── Assessment Types ──────────────────────────────────────────────────────
+  async ensureAssessmentTypeConfigs() {
+    await Promise.all(DEFAULT_ASSESSMENT_TYPE_CONFIGS.map((type) =>
+      db.assessmentTypeConfig.upsert({
+        where: { code: type.code },
+        create: type,
+        update: {},
+      })
+    ));
+  },
+
+  async listAssessmentTypeConfigs() {
+    await this.ensureAssessmentTypeConfigs();
+    return db.assessmentTypeConfig.findMany({
+      orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
+    });
+  },
+
+  async updateAssessmentTypeConfig(id: number, data: UpdateAssessmentTypeConfigInput) {
+    return db.assessmentTypeConfig.update({ where: { id }, data });
+  },
+
+  async ensureAssessmentLevelConfigs() {
+    await Promise.all(DEFAULT_ASSESSMENT_LEVEL_CONFIGS.map((level) =>
+      db.assessmentLevelConfig.upsert({
+        where: { code: level.code },
+        create: level,
+        update: {},
+      })
+    ));
+  },
+
+  async listAssessmentLevelConfigs() {
+    await this.ensureAssessmentLevelConfigs();
+    return db.assessmentLevelConfig.findMany({
+      orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
+    });
+  },
+
+  async updateAssessmentLevelConfig(id: number, data: UpdateAssessmentLevelConfigInput) {
+    return db.assessmentLevelConfig.update({ where: { id }, data });
+  },
+
+  async ensureAssessmentStatusConfigs() {
+    await Promise.all(DEFAULT_ASSESSMENT_STATUS_CONFIGS.map((status) =>
+      db.assessmentStatusConfig.upsert({
+        where: { code: status.code },
+        create: status,
+        update: {},
+      })
+    ));
+  },
+
+  async listAssessmentStatusConfigs() {
+    await this.ensureAssessmentStatusConfigs();
+    return db.assessmentStatusConfig.findMany({
+      orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
+    });
+  },
+
+  async updateAssessmentStatusConfig(id: number, data: UpdateAssessmentStatusConfigInput) {
+    return db.assessmentStatusConfig.update({ where: { id }, data });
+  },
+
+  async ensureAssessmentProjectConfigs() {
+    await Promise.all(DEFAULT_ASSESSMENT_PROJECT_CONFIGS.map((project) =>
+      db.assessmentProjectConfig.upsert({
+        where: { project_count: project.project_count },
+        create: project,
+        update: {},
+      })
+    ));
+  },
+
+  async listAssessmentProjectConfigs() {
+    await this.ensureAssessmentProjectConfigs();
+    return db.assessmentProjectConfig.findMany({
+      orderBy: [{ sort_order: 'asc' }, { project_count: 'asc' }],
+    });
+  },
+
+  async updateAssessmentProjectConfig(id: number, data: UpdateAssessmentProjectConfigInput) {
+    return db.assessmentProjectConfig.update({ where: { id }, data });
+  },
+
   // ── Users ──────────────────────────────────────────────────────────────────
   async listUsers() {
     return db.user.findMany({
@@ -130,7 +270,7 @@ export const configService = {
     return db.department.delete({ where: { id } });
   },
 
-  // ── Department Config (formula weights) ────────────────────────────────────
+  // ── Department Config (scoring values) ─────────────────────────────────────
   async upsertDepartmentConfig(departmentId: number, data: UpsertDepartmentConfigInput) {
     return db.departmentConfig.upsert({
       where: { department_id: departmentId },

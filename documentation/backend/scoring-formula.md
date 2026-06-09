@@ -554,15 +554,14 @@ Then the result is rounded to 2 decimal places.
 | `Secondary` | `0.15` | Supporting technology. Gives medium credit. |
 | `Tertiary` | `0.10` | Related technology. Gives lower credit. |
 
-These values can be changed per department through department formula weights:
+These values are configured as individual assessment type rows:
 
 ```text
-primary_weight
-secondary_weight
-tertiary_weight
+assessment_type_configs.code
+assessment_type_configs.weight
 ```
 
-If no department-specific config exists, the defaults above are used.
+The configuration UI lists the type rows separately from departments. If a type row is missing or inactive, the default value above is used.
 
 ### 5.2 Level Weights
 
@@ -576,6 +575,16 @@ If no department-specific config exists, the defaults above are used.
 | `Awareness` | `0.20` |
 | `Unset` | `0.00` |
 
+These values are configured as individual assessment level rows:
+
+```text
+assessment_level_configs.code
+assessment_level_configs.weight
+assessment_level_configs.threshold
+```
+
+If a level row is missing or inactive, the default value above is used.
+
 ### 5.3 Project Count Rule
 
 | Input `projects` | Used as | Why |
@@ -586,6 +595,18 @@ If no department-specific config exists, the defaults above are used.
 | `2` | `2` | Two-thirds project credit. |
 | `3` | `3` | Full project credit. |
 | `4` or more | `3` | Score is capped at three projects. |
+
+Project options are configured as individual project rows:
+
+```text
+assessment_project_configs.project_count
+assessment_project_configs.credit
+assessment_project_configs.duration_months_min
+assessment_project_configs.duration_months_max
+assessment_project_configs.threshold
+```
+
+The seeded project credits mirror the current formula: `0`, `1/3`, `2/3`, and `1`.
 
 ### 5.4 Examples
 
@@ -708,31 +729,31 @@ Displayed as 4%
 
 ---
 
-## 6. Department-Specific Assessment Weights
+## 6. Assessment Type Configuration
 
-**Code:** `getDeptFormulaWeights(employeeId)` plus `computeAssessmentScore(...)`
+**Code:** `getConfiguredScoringValues()` plus `computeAssessmentScore(...)`
 
-Some departments can use different skill importance values for `Primary`, `Secondary`, and `Tertiary`.
+Admins configure `Primary`, `Secondary`, and `Tertiary` as individual type rows. These values are global scoring inputs, not department-specific values.
 
 Default weights:
 
 ```text
-primary_weight   = 0.25
-secondary_weight = 0.15
-tertiary_weight  = 0.10
+Primary   = 0.25
+Secondary = 0.15
+Tertiary  = 0.10
 ```
 
-Example department override:
+Example configured values:
 
 ```text
-primary_weight   = 0.50
-secondary_weight = 0.30
-tertiary_weight  = 0.20
+Primary   = 0.50
+Secondary = 0.30
+Tertiary  = 0.20
 ```
 
 ### 6.1 Examples
 
-#### Example 1 - Primary uses department override
+#### Example 1 - Primary uses configured type value
 
 Input fields:
 
@@ -741,13 +762,13 @@ Input fields:
 | `type` | `Primary` |
 | `projects` | `3` |
 | `level` | `Expert` |
-| `primary_weight` | `0.50` |
+| `Primary.weight` | `0.50` |
 
 Calculation:
 
 ```text
 Field/value mapping:
-`type` = Primary       -> skill importance weight = `primary_weight` = 0.50
+`type` = Primary       -> skill importance weight = `Primary.weight` = 0.50
 `projects` = 3         -> project count used = 3
 max projects           -> maximum projects = 3
 base credit            -> base credit = 1
@@ -781,13 +802,13 @@ Input fields:
 | `type` | `Secondary` |
 | `projects` | `0` |
 | `level` | `Proficient` |
-| `secondary_weight` | `0.30` |
+| `Secondary.weight` | `0.30` |
 
 Calculation:
 
 ```text
 Field/value mapping:
-`type` = Secondary     -> skill importance weight = `secondary_weight` = 0.30
+`type` = Secondary     -> skill importance weight = `Secondary.weight` = 0.30
 `projects` = 0         -> project count used = 0
 max projects           -> maximum projects = 3
 base credit            -> base credit = 1
@@ -828,10 +849,11 @@ Competency Score = sum of approved skill_assessments.score rows
 
 The engine prefers the stored `skill_assessments.score`. If an old row has stored score `0`, the engine recalculates that row from `type`, `projects`, and `level`.
 
-Rules:
+Status rules:
 
-- Only approved assessments count.
-- Pending assessments do not count.
+- Rows count when their status config has `counts_toward_score = true`.
+- The seeded countable status is `approved`.
+- Pending assessments do not count by default.
 - The score is rounded to 2 decimal places.
 - There is no hard cap at `1.00`; a competency can go above 100% if it has many strong technologies.
 

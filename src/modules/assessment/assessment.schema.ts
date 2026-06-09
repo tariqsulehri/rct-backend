@@ -5,7 +5,7 @@ export const createSkillAssessmentSchema = z.object({
   technology_id: z.number().int().positive('Technology ID must be a positive integer'),
   type: z.enum(['Primary', 'Secondary', 'Tertiary']),
   projects: z.number().int().min(0).max(3),
-  level: z.enum(['Expert', 'Advanced', 'Proficient', 'Foundational', 'Awareness', 'Unset']).default('Unset'),
+  level: z.enum(['Expert', 'Advanced', 'Proficient', 'Foundational', 'Beginner', 'Awareness', 'Unset']).default('Unset'),
 });
 
 export const updateSkillAssessmentSchema = createSkillAssessmentSchema
@@ -13,7 +13,7 @@ export const updateSkillAssessmentSchema = createSkillAssessmentSchema
   .partial();
 
 export const approveSkillAssessmentSchema = z.object({
-  level: z.enum(['Expert', 'Advanced', 'Proficient', 'Foundational', 'Awareness', 'Unset']).optional(),
+  level: z.enum(['Expert', 'Advanced', 'Proficient', 'Foundational', 'Beginner', 'Awareness', 'Unset']).optional(),
   type: z.enum(['Primary', 'Secondary', 'Tertiary']).optional(),
   projects: z.number().int().min(0).max(3).optional(),
 });
