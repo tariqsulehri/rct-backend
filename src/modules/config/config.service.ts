@@ -279,7 +279,7 @@ export const configService = {
   },
 
   async listLineManagerAssignments() {
-    return db.employeeLineManagerAssignment.findMany({
+    const assignments = await db.employeeLineManagerAssignment.findMany({
       include: {
         manager_user: { include: { employee: true, role_ref: true } },
         employee: { include: { dept: true, current_grade: true, target_grade: true } },
@@ -287,9 +287,15 @@ export const configService = {
       },
       orderBy: [{ is_active: 'desc' }, { manager_user: { username: 'asc' } }, { employee: { full_name: 'asc' } }],
     });
+    return assignments.filter((assignment) => assignment.manager_user.employee_id !== assignment.employee_id);
   },
 
   async createLineManagerAssignment(data: CreateLineManagerAssignmentInput, actorUserId?: number) {
+    await this.assertNotSelfLineManager(data.manager_user_id, data.employee_id);
+    if (data.is_active !== false) {
+      await this.assertOnlyOneActiveLineManager(data.employee_id, data.relationship_type, data.manager_user_id);
+      await this.ensureLineManagerRole(data.manager_user_id);
+    }
     const created = await db.employeeLineManagerAssignment.upsert({
       where: {
         manager_user_id_employee_id_relationship_type: {
@@ -319,6 +325,17 @@ export const configService = {
 
   async updateLineManagerAssignment(id: number, data: UpdateLineManagerAssignmentInput, actorUserId?: number) {
     const before = await db.employeeLineManagerAssignment.findUnique({ where: { id } });
+    if (before) {
+      const managerUserId = data.manager_user_id ?? before.manager_user_id;
+      const employeeId = data.employee_id ?? before.employee_id;
+      const relationshipType = data.relationship_type ?? before.relationship_type;
+      const isActive = data.is_active ?? before.is_active;
+      await this.assertNotSelfLineManager(managerUserId, employeeId);
+      if (isActive) {
+        await this.assertOnlyOneActiveLineManager(employeeId, relationshipType, managerUserId, id);
+        await this.ensureLineManagerRole(managerUserId);
+      }
+    }
     const updated = await db.employeeLineManagerAssignment.update({
       where: { id },
       data,
@@ -361,6 +378,63 @@ export const configService = {
       newValue: updated,
     });
     return updated;
+  },
+
+  async assertNotSelfLineManager(managerUserId: number, employeeId: number) {
+    const manager = await db.user.findUnique({
+      where: { id: managerUserId },
+      select: { employee_id: true },
+    });
+    if (manager?.employee_id === employeeId) {
+      throw Object.assign(new Error('A user cannot be assigned as line manager for their own employee record.'), {
+        statusCode: 400,
+        code: 'SELF_LINE_MANAGER_NOT_ALLOWED',
+      });
+    }
+  },
+
+  async assertOnlyOneActiveLineManager(employeeId: number, relationshipType: string, managerUserId: number, ignoreAssignmentId?: number) {
+    const existing = await db.employeeLineManagerAssignment.findFirst({
+      where: {
+        employee_id: employeeId,
+        relationship_type: relationshipType,
+        is_active: true,
+        ...(ignoreAssignmentId ? { id: { not: ignoreAssignmentId } } : {}),
+      },
+      include: {
+        manager_user: { include: { employee: true } },
+        employee: true,
+      },
+    });
+    if (existing && existing.manager_user_id !== managerUserId) {
+      const employeeLabel = `${existing.employee.emp_code} - ${existing.employee.full_name}`;
+      const managerLabel = existing.manager_user.employee
+        ? `${existing.manager_user.employee.emp_code} - ${existing.manager_user.employee.full_name}`
+        : existing.manager_user.username;
+      throw Object.assign(new Error(`${employeeLabel} is already actively assigned to line manager ${managerLabel}. Deactivate that assignment before reassigning.`), {
+        statusCode: 409,
+        code: 'EMPLOYEE_ALREADY_HAS_ACTIVE_LINE_MANAGER',
+      });
+    }
+  },
+
+  async ensureLineManagerRole(managerUserId: number) {
+    const manager = await db.user.findUnique({
+      where: { id: managerUserId },
+      select: { role: true },
+    });
+
+    if (!manager || manager.role !== 'ENGINEER') return;
+
+    await this.ensureRoles();
+    const lineManagerRole = await db.accessRole.findUnique({ where: { code: 'LINE_MANAGER' } });
+    await db.user.update({
+      where: { id: managerUserId },
+      data: {
+        role: 'LINE_MANAGER',
+        role_id: lineManagerRole?.id ?? null,
+      },
+    });
   },
 
   // ── Assessment Types ──────────────────────────────────────────────────────
@@ -468,7 +542,7 @@ export const configService = {
         role: data.role,
         role_id: role?.id,
         employee_id: data.employee_id,
-        is_active: true,
+        is_active: data.is_active ?? true,
       },
     });
   },
