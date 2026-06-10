@@ -13,7 +13,7 @@ export const loginResponseSchema = z.object({
     id: z.number(),
     empCode: z.string(),
     username: z.string(),
-    role: z.enum(['ADMIN', 'MANAGER', 'ENGINEER']),
+    role: z.enum(['ADMIN', 'TOP_MANAGEMENT', 'MANAGER', 'LINE_MANAGER', 'ENGINEER']),
     employeeName: z.string(),
   }),
 });

@@ -511,6 +511,39 @@ export const assessmentService = {
     }
   },
 
+  async getEmployeesByIds(employeeIds: number[], department?: string): Promise<TeamMemberResponse[]> {
+    try {
+      if (employeeIds.length === 0) return [];
+      const employees = await db.employee.findMany({
+        where: {
+          id: { in: employeeIds },
+          deleted_at: null,
+          ...(department && { department }),
+        },
+        include: {
+          current_grade: { select: { id: true, code: true, title: true, level: true } },
+          target_grade: { select: { id: true, code: true, title: true, level: true } },
+          skill_assessments: { select: { id: true } },
+        },
+        orderBy: [{ department: 'asc' }, { full_name: 'asc' }],
+      });
+
+      return employees.map((emp) => ({
+        id: emp.id,
+        emp_code: emp.emp_code,
+        full_name: emp.full_name,
+        department: emp.department,
+        email: emp.email,
+        current_grade: emp.current_grade,
+        target_grade: emp.target_grade,
+        skill_assessments_count: emp.skill_assessments.length,
+      }));
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch scoped employees');
+      throw error;
+    }
+  },
+
   async getAllEmployees(department?: string): Promise<TeamMemberResponse[]> {
     try {
       const employees = await db.employee.findMany({

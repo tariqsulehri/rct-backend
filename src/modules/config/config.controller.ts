@@ -3,6 +3,17 @@ import { configService } from './config.service';
 import logger from '../../config/logger';
 
 export const configController = {
+  // ── Roles ────────────────────────────────────────────────────────────────
+  async listRoles(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listRoles();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List roles error');
+      next(error);
+    }
+  },
+
   // ── Scoring Config ────────────────────────────────────────────────────────
   async listAssessmentTypeConfigs(req: Request, res: Response, next: NextFunction) {
     try {

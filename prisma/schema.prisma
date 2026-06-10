@@ -213,6 +213,7 @@ model Department {
   competency_domain_maps CompetencyDomainMap[]
   skill_assessments SkillAssessment[]
   competency_scores CompetencyScore[]
+  user_assignments UserDepartmentAssignment[]
 
   @@unique([organization_id, name])
   @@index([organization_id])
@@ -294,13 +295,32 @@ model GradeMatrix {
 
 enum Role {
   ADMIN
+  TOP_MANAGEMENT
   MANAGER
+  LINE_MANAGER
   ENGINEER
+}
+
+model AccessRole {
+  id          Int      @id @default(autoincrement())
+  code        Role     @unique
+  name        String
+  description String?
+  is_system   Boolean  @default(true)
+  is_active   Boolean  @default(true)
+  sort_order  Int      @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  users User[]
+
+  @@map("roles")
 }
 
 model User {
   id            Int    @id @default(autoincrement())
   employee_id   Int    @unique
+  role_id       Int?
   username      String @unique
   password_hash String // bcrypt cost 12
   role          Role
@@ -317,11 +337,68 @@ model User {
   updated_at DateTime @updatedAt
 
   employee       Employee       @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  role_ref       AccessRole?    @relation(fields: [role_id], references: [id], onDelete: SetNull)
   refresh_tokens RefreshToken[]
+  department_assignments UserDepartmentAssignment[]
+  line_manager_assignments EmployeeLineManagerAssignment[] @relation("LineManagerUser")
+  created_department_assignments UserDepartmentAssignment[] @relation("CreatedDepartmentAssignments")
+  created_line_manager_assignments EmployeeLineManagerAssignment[] @relation("CreatedLineManagerAssignments")
 
   @@index([employee_id])
+  @@index([role_id])
   @@index([username])
   @@map("users")
+}
+
+model UserDepartmentAssignment {
+  id              Int      @id @default(autoincrement())
+  user_id         Int
+  department_id   Int
+  assignment_type String   @default("MANAGER")
+  can_view        Boolean  @default(true)
+  can_manage      Boolean  @default(false)
+  starts_at       DateTime @default(now())
+  ends_at         DateTime?
+  is_active       Boolean  @default(true)
+  created_by      Int?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  creator    User?      @relation("CreatedDepartmentAssignments", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@unique([user_id, department_id, assignment_type])
+  @@index([user_id])
+  @@index([department_id])
+  @@index([is_active])
+  @@map("user_department_assignments")
+}
+
+model EmployeeLineManagerAssignment {
+  id                Int      @id @default(autoincrement())
+  manager_user_id   Int
+  employee_id       Int
+  relationship_type String   @default("LINE_MANAGER")
+  can_view          Boolean  @default(true)
+  can_assess        Boolean  @default(true)
+  starts_at         DateTime @default(now())
+  ends_at           DateTime?
+  is_primary        Boolean  @default(false)
+  is_active         Boolean  @default(true)
+  created_by        Int?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  manager_user User     @relation("LineManagerUser", fields: [manager_user_id], references: [id], onDelete: Cascade)
+  employee     Employee @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  creator      User?    @relation("CreatedLineManagerAssignments", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@unique([manager_user_id, employee_id, relationship_type])
+  @@index([manager_user_id])
+  @@index([employee_id])
+  @@index([is_active])
+  @@map("employee_line_manager_assignments")
 }
 
 model RefreshToken {
@@ -369,6 +446,7 @@ model Employee {
   dept          Department?  @relation(fields: [department_id], references: [id])
 
   user              User?
+  line_manager_assignments EmployeeLineManagerAssignment[]
   skill_assessments SkillAssessment[]
   competency_scores CompetencyScore[]
   domain_scores     DomainScore[]

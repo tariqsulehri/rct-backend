@@ -8,6 +8,8 @@ import {
   scoreToSkillSummaryStarRating,
   weightedOverall,
 } from '../../scoring/reporting.engine';
+import { accessScopeService } from '../access/access-scope.service';
+import { RoleCode } from '../../types/rbac';
 
 // ── Canonical scoring architecture ───────────────────────────────────────────
 // skill_assessments.score  = formula1(type, projects, scoring values) × levelWeight   (stored per row)
@@ -158,44 +160,37 @@ export async function gapAnalysis(employeeId: number) {
 
 // ── 2. Promotion Readiness ────────────────────────────────────────────────────
 
-async function getEmployeesForManager(managerId: number, role: string, employeeId?: number) {
+async function getEmployeesForManager(userId: number, managerId: number, role: RoleCode, employeeId?: number) {
+  const accessibleEmployeeIds = await accessScopeService.getAccessibleEmployeeIds({
+    id: userId,
+    employeeId: managerId,
+    role,
+  });
+  const scopedIds = employeeId
+    ? accessibleEmployeeIds.filter((id) => id === employeeId)
+    : accessibleEmployeeIds;
+
+  if (scopedIds.length === 0) return [];
+
   if (employeeId) {
     return db.employee.findMany({
       where: {
-        id: employeeId,
+        id: { in: scopedIds },
         deleted_at: null,
-        ...(role === 'MANAGER'
-          ? { OR: [{ id: managerId }, { manager_id: managerId }] }
-          : {}),
-      },
-      include: { current_grade: true, target_grade: true },
-    });
-  }
-  if (role === 'ADMIN') {
-    return db.employee.findMany({
-      where: { deleted_at: null },
-      include: { current_grade: true, target_grade: true },
-    });
-  }
-  if (role === 'MANAGER') {
-    return db.employee.findMany({
-      where: {
-        deleted_at: null,
-        OR: [{ id: managerId }, { manager_id: managerId }],
       },
       include: { current_grade: true, target_grade: true },
     });
   }
   return db.employee.findMany({
-    where: { id: managerId, deleted_at: null },
+    where: { id: { in: scopedIds }, deleted_at: null },
     include: { current_grade: true, target_grade: true },
   });
 }
 
-export async function promotionReadiness(managerId: number, role: string) {
+export async function promotionReadiness(userId: number, managerId: number, role: RoleCode) {
   logger.info({ managerId, role }, 'Running promotion readiness report');
 
-  const employees = await getEmployeesForManager(managerId, role);
+  const employees = await getEmployeesForManager(userId, managerId, role);
   const employeeIds = employees.map((e) => e.id);
 
   const allCompetencies = await db.competency.findMany({
@@ -257,10 +252,10 @@ export async function promotionReadiness(managerId: number, role: string) {
 
 // ── 3. Competency Scores ──────────────────────────────────────────────────────
 
-export async function competencyScores(managerId: number, role: string, _employeeId?: number) {
+export async function competencyScores(userId: number, managerId: number, role: RoleCode, _employeeId?: number) {
   logger.info({ managerId, role }, 'Running competency scores report');
 
-  const employees = await getEmployeesForManager(managerId, role);
+  const employees = await getEmployeesForManager(userId, managerId, role);
   const employeeIds = employees.map((e) => e.id);
 
   const allCompetencies = await db.competency.findMany({
@@ -299,8 +294,9 @@ export async function competencyScores(managerId: number, role: string, _employe
 // ── 4. Assessment History ─────────────────────────────────────────────────────
 
 export async function assessmentHistory(
+  userId: number,
   managerId: number,
-  role: string,
+  role: RoleCode,
   page: number,
   limit: number
 ) {
@@ -308,16 +304,8 @@ export async function assessmentHistory(
 
   const skip = (page - 1) * limit;
 
-  let employeeIdFilter: { in: number[] } | undefined;
-  if (role !== 'ADMIN') {
-    const directReports = await db.employee.findMany({
-      where: { manager_id: managerId, deleted_at: null },
-      select: { id: true },
-    });
-    employeeIdFilter = { in: directReports.map((e) => e.id) };
-  }
-
-  const where = employeeIdFilter ? { employee_id: employeeIdFilter } : {};
+  const employeeIds = await accessScopeService.getAccessibleEmployeeIds({ id: userId, employeeId: managerId, role });
+  const where = { employee_id: { in: employeeIds } };
 
   const [total, assessments] = await Promise.all([
     db.skillAssessment.count({ where }),
@@ -363,10 +351,10 @@ export async function assessmentHistory(
 
 // ── 5. Competency Matrix ──────────────────────────────────────────────────────
 
-export async function competencyMatrix(managerId: number, role: string, employeeId?: number) {
+export async function competencyMatrix(userId: number, managerId: number, role: RoleCode, employeeId?: number) {
   logger.info({ managerId, role }, 'Running competency matrix report');
 
-  const employees = await getEmployeesForManager(managerId, role, employeeId);
+  const employees = await getEmployeesForManager(userId, managerId, role, employeeId);
   const employeeIds = employees.map((e) => e.id);
 
   const allCompetencies = await db.competency.findMany({
@@ -428,10 +416,10 @@ export async function competencyMatrix(managerId: number, role: string, employee
 
 // ── 6. Gap Matrix ─────────────────────────────────────────────────────────────
 
-export async function gapMatrix(managerId: number, role: string, employeeId?: number) {
+export async function gapMatrix(userId: number, managerId: number, role: RoleCode, employeeId?: number) {
   logger.info({ managerId, role }, 'Running gap matrix report');
 
-  const employees = await getEmployeesForManager(managerId, role, employeeId);
+  const employees = await getEmployeesForManager(userId, managerId, role, employeeId);
   const employeeIds = employees.map((e) => e.id);
 
   const allCompetencies = await db.competency.findMany({
@@ -536,10 +524,10 @@ export async function gapMatrix(managerId: number, role: string, employeeId?: nu
 
 // ── 7. Skills Summary ─────────────────────────────────────────────────────────
 
-export async function skillsSummary(managerId: number, role: string, employeeId?: number) {
+export async function skillsSummary(userId: number, managerId: number, role: RoleCode, employeeId?: number) {
   logger.info({ managerId, role }, 'Running skills summary report');
 
-  const employees = await getEmployeesForManager(managerId, role, employeeId);
+  const employees = await getEmployeesForManager(userId, managerId, role, employeeId);
   const employeeIds = employees.map((e) => e.id);
 
   const allCompetencies = await db.competency.findMany({

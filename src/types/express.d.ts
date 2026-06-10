@@ -1,10 +1,13 @@
+import { RoleCode } from './rbac';
+
 declare global {
   namespace Express {
     interface Request {
       user?: {
         id: number;
         employeeId: number;
-        role: 'ADMIN' | 'MANAGER' | 'ENGINEER';
+        empCode: string;
+        role: RoleCode;
         username: string;
       };
     }

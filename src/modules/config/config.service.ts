@@ -86,6 +86,14 @@ const DEFAULT_ORGANIZATION = {
   base_url: 'https://tkxel.com',
 };
 
+const DEFAULT_ROLES = [
+  { code: 'ADMIN' as const, name: 'Admin', description: 'System configuration and administration.', sort_order: 1 },
+  { code: 'TOP_MANAGEMENT' as const, name: 'Top Management', description: 'Leadership access to assigned departments.', sort_order: 2 },
+  { code: 'MANAGER' as const, name: 'Manager', description: 'Department manager with assignment-scoped access.', sort_order: 3 },
+  { code: 'LINE_MANAGER' as const, name: 'Line Manager', description: 'Direct manager for assigned employees across departments.', sort_order: 4 },
+  { code: 'ENGINEER' as const, name: 'Engineer', description: 'Own record and own assessment access.', sort_order: 5 },
+];
+
 async function getDefaultOrganizationId(): Promise<number> {
   const organization = await db.organization.upsert({
     where: { slug: DEFAULT_ORGANIZATION.slug },
@@ -110,6 +118,25 @@ async function getDefaultDepartmentId(): Promise<number> {
 }
 
 export const configService = {
+  // ── Roles ─────────────────────────────────────────────────────────────────
+  async ensureRoles() {
+    await Promise.all(DEFAULT_ROLES.map((role) =>
+      db.accessRole.upsert({
+        where: { code: role.code },
+        create: { ...role, is_system: true, is_active: true },
+        update: { name: role.name, description: role.description, sort_order: role.sort_order, is_active: true },
+      })
+    ));
+  },
+
+  async listRoles() {
+    await this.ensureRoles();
+    return db.accessRole.findMany({
+      where: { is_active: true },
+      orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
+    });
+  },
+
   // ── Assessment Types ──────────────────────────────────────────────────────
   async ensureAssessmentTypeConfigs() {
     await Promise.all(DEFAULT_ASSESSMENT_TYPE_CONFIGS.map((type) =>
@@ -197,19 +224,23 @@ export const configService = {
 
   // ── Users ──────────────────────────────────────────────────────────────────
   async listUsers() {
+    await this.ensureRoles();
     return db.user.findMany({
-      include: { employee: true },
+      include: { employee: true, role_ref: true },
       orderBy: { created_at: 'desc' },
     });
   },
 
   async createUser(data: CreateUserInput) {
+    await this.ensureRoles();
+    const role = await db.accessRole.findUnique({ where: { code: data.role } });
     const hashed = await bcryptjs.hash(data.password, 12);
     return db.user.create({
       data: {
         username: data.username,
         password_hash: hashed,
         role: data.role,
+        role_id: role?.id,
         employee_id: data.employee_id,
         is_active: true,
       },
@@ -236,6 +267,11 @@ export const configService = {
       }
     }
     const updateData: Record<string, unknown> = { ...data };
+    if (data.role) {
+      await this.ensureRoles();
+      const role = await db.accessRole.findUnique({ where: { code: data.role } });
+      updateData.role_id = role?.id ?? null;
+    }
     if (data.password) {
       updateData.password_hash = await bcryptjs.hash(data.password, 12);
       delete updateData.password;

@@ -2,25 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { assessmentService } from './assessment.service';
 import { db } from '../../config/database';
 import logger from '../../config/logger';
+import { accessScopeService } from '../access/access-scope.service';
 
 async function canAccessEmployee(req: Request, employeeId: number): Promise<boolean> {
   if (!req.user) return false;
-  if (req.user.role === 'ADMIN') return true;
-  if (req.user.role === 'ENGINEER') return req.user.employeeId === employeeId;
-
-  const employee = await db.employee.findFirst({
-    where: {
-      id: employeeId,
-      deleted_at: null,
-      OR: [
-        { id: req.user.employeeId },
-        { manager_id: req.user.employeeId },
-      ],
-    },
-    select: { id: true },
-  });
-
-  return Boolean(employee);
+  return accessScopeService.canAccessEmployee(req.user, employeeId, { forAssessment: true });
 }
 
 export const assessmentController = {
@@ -148,9 +134,8 @@ export const assessmentController = {
   async getTeamRoster(req: Request, res: Response, next: NextFunction) {
     try {
       const department = req.query.department as string | undefined;
-      const roster = req.user!.role === 'ADMIN'
-        ? await assessmentService.getAllEmployees(department)
-        : await assessmentService.getTeamRoster(req.user!.employeeId, department);
+      const accessibleEmployeeIds = await accessScopeService.getAccessibleEmployeeIds(req.user!);
+      const roster = await assessmentService.getEmployeesByIds(accessibleEmployeeIds, department);
       res.json({ success: true, data: roster });
     } catch (error) {
       logger.error({ error }, 'Get team roster error');

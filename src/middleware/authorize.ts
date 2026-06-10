@@ -1,13 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '../config/logger';
-
-type Role = 'ADMIN' | 'MANAGER' | 'ENGINEER';
+import { RoleCode } from '../types/rbac';
 
 /**
  * Role-based authorization middleware
  * Usage: requireRole('ADMIN', 'MANAGER') - allows only ADMIN and MANAGER
  */
-export const requireRole = (...roles: Role[]) => {
+export const requireRole = (...roles: RoleCode[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       res.status(401).json({

@@ -36,6 +36,9 @@ const router = Router();
 // All config routes require authentication
 router.use(authenticate);
 
+// ── Roles (ADMIN only) ───────────────────────────────────────────────────────
+router.get('/roles', requireRole('ADMIN'), configController.listRoles);
+
 // ── Scoring Config (ADMIN only) ──────────────────────────────────────────────
 router.get('/assessment-types', requireRole('ADMIN'), configController.listAssessmentTypeConfigs);
 router.patch('/assessment-types/:id', requireRole('ADMIN'), validate(updateAssessmentTypeConfigSchema), configController.updateAssessmentTypeConfig);
@@ -102,7 +105,7 @@ router.delete('/competencies/:id', requireRole('ADMIN'), configController.delete
 
 // ── Technologies ──────────────────────────────────────────────────────────────
 // Read is open to all roles so MANAGER and ENGINEER can browse the skill catalog
-router.get('/technologies', requireRole('ADMIN', 'MANAGER', 'ENGINEER'), configController.listTechnologies);
+router.get('/technologies', requireRole('ADMIN', 'TOP_MANAGEMENT', 'MANAGER', 'LINE_MANAGER', 'ENGINEER'), configController.listTechnologies);
 router.post('/technologies', requireRole('ADMIN'), validate(createTechnologySchema), configController.createTechnology);
 router.patch('/technologies/:id', requireRole('ADMIN'), validate(updateTechnologySchema), configController.updateTechnology);
 router.delete('/technologies/:id', requireRole('ADMIN'), configController.deleteTechnology);

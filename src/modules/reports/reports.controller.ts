@@ -4,12 +4,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as reportsService from './reports.service';
 import logger from '../../config/logger';
+import { accessScopeService } from '../access/access-scope.service';
 
-async function canAccessEmployee(req: Request, employee: { id: number; manager_id: number | null }): Promise<boolean> {
+async function canAccessEmployee(req: Request, employeeId: number): Promise<boolean> {
   if (!req.user) return false;
-  if (req.user.role === 'ADMIN') return true;
-  if (req.user.role === 'ENGINEER') return req.user.employeeId === employee.id;
-  return employee.id === req.user.employeeId || employee.manager_id === req.user.employeeId;
+  return accessScopeService.canAccessEmployee(req.user, employeeId);
 }
 
 export const reportsController = {
@@ -19,10 +18,10 @@ export const reportsController = {
       const { db } = await import('../../config/database');
       const employee = await db.employee.findUnique({
         where: { emp_code: req.params.empCode },
-        select: { id: true, manager_id: true },
+        select: { id: true },
       });
       if (!employee) { res.status(404).json({ success: false, error: 'Employee not found' }); return; }
-      if (!(await canAccessEmployee(req, employee))) {
+      if (!(await canAccessEmployee(req, employee.id))) {
         res.status(403).json({ success: false, error: 'Access denied' });
         return;
       }
@@ -36,7 +35,7 @@ export const reportsController = {
 
   async getPromotionReadiness(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await reportsService.promotionReadiness(req.user!.employeeId, req.user!.role);
+      const result = await reportsService.promotionReadiness(req.user!.id, req.user!.employeeId, req.user!.role);
       res.json({ success: true, data: result });
     } catch (error) {
       logger.error({ error }, 'Get promotion readiness error');
@@ -47,7 +46,7 @@ export const reportsController = {
   async getCompetencyScores(req: Request, res: Response, next: NextFunction) {
     try {
       const empId = req.user!.role === 'ENGINEER' ? req.user!.employeeId : undefined;
-      const result = await reportsService.competencyScores(req.user!.employeeId, req.user!.role, empId);
+      const result = await reportsService.competencyScores(req.user!.id, req.user!.employeeId, req.user!.role, empId);
       res.json({ success: true, data: result });
     } catch (error) {
       logger.error({ error }, 'Get competency scores error');
@@ -58,7 +57,7 @@ export const reportsController = {
   async getCompetencyMatrix(req: Request, res: Response, next: NextFunction) {
     try {
       const empId = req.user!.role === 'ENGINEER' ? req.user!.employeeId : undefined;
-      const result = await reportsService.competencyMatrix(req.user!.employeeId, req.user!.role, empId);
+      const result = await reportsService.competencyMatrix(req.user!.id, req.user!.employeeId, req.user!.role, empId);
       res.json({ success: true, data: result });
     } catch (error) {
       logger.error({ error }, 'Get competency matrix error');
@@ -86,7 +85,7 @@ export const reportsController = {
   async getGapMatrix(req: Request, res: Response, next: NextFunction) {
     try {
       const empId = req.user!.role === 'ENGINEER' ? req.user!.employeeId : undefined;
-      const result = await reportsService.gapMatrix(req.user!.employeeId, req.user!.role, empId);
+      const result = await reportsService.gapMatrix(req.user!.id, req.user!.employeeId, req.user!.role, empId);
       res.json({ success: true, data: result });
     } catch (error) {
       logger.error({ error }, 'Get gap matrix error');
@@ -97,7 +96,7 @@ export const reportsController = {
   async getSkillsSummary(req: Request, res: Response, next: NextFunction) {
     try {
       const empId = req.user!.role === 'ENGINEER' ? req.user!.employeeId : undefined;
-      const result = await reportsService.skillsSummary(req.user!.employeeId, req.user!.role, empId);
+      const result = await reportsService.skillsSummary(req.user!.id, req.user!.employeeId, req.user!.role, empId);
       res.json({ success: true, data: result });
     } catch (error) {
       logger.error({ error }, 'Get skills summary error');
@@ -110,6 +109,7 @@ export const reportsController = {
       const page = parseInt((req.query.page as string) || '1');
       const limit = parseInt((req.query.limit as string) || '20');
       const result = await reportsService.assessmentHistory(
+        req.user!.id,
         req.user!.employeeId,
         req.user!.role,
         page,

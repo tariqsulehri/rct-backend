@@ -1,15 +1,17 @@
 import { z } from 'zod';
 
+const roleCodeSchema = z.enum(['ADMIN', 'TOP_MANAGEMENT', 'MANAGER', 'LINE_MANAGER', 'ENGINEER']);
+
 export const createUserSchema = z.object({
   username: z.string().min(3).max(50),
   password: z.string().min(8),
-  role: z.enum(['ADMIN', 'MANAGER', 'ENGINEER']),
+  role: roleCodeSchema,
   employee_id: z.number().int().positive(),
 });
 export const updateUserSchema = z.object({
   username: z.string().min(3).max(50).optional(),
   password: z.string().min(8).optional(),
-  role: z.enum(['ADMIN', 'MANAGER', 'ENGINEER']).optional(),
+  role: roleCodeSchema.optional(),
   employee_id: z.number().int().positive().optional(),
   is_active: z.boolean().optional(),
 });

@@ -13,7 +13,7 @@ router.use(authenticate);
 // Create skill assessment — ENGINEER may only create for themselves
 router.post(
   '/skill-assessments',
-  requireRole('MANAGER', 'ADMIN', 'ENGINEER'),
+  requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN', 'ENGINEER'),
   (req, res, next) => {
     if (req.user!.role === 'ENGINEER' && req.body.employee_id !== req.user!.empCode) {
       res.status(403).json({ success: false, error: 'You can only create assessments for yourself' });
@@ -28,7 +28,7 @@ router.post(
 // Approve a pending skill assessment (set status=approved + optional level) — MANAGER/ADMIN only
 router.patch(
   '/skill-assessments/:id/approve',
-  requireRole('MANAGER', 'ADMIN'),
+  requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN'),
   validate(approveSkillAssessmentSchema),
   assessmentController.approveAssessment,
 );
@@ -36,7 +36,7 @@ router.patch(
 // Update skill assessment — ENGINEER may only update their own (level is stripped server-side)
 router.patch(
   '/skill-assessments/:id',
-  requireRole('MANAGER', 'ADMIN', 'ENGINEER'),
+  requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN', 'ENGINEER'),
   validate(updateSkillAssessmentSchema),
   assessmentController.updateAssessment,
 );
@@ -44,14 +44,14 @@ router.patch(
 // Delete skill assessment — ENGINEER may only delete their own
 router.delete(
   '/skill-assessments/:id',
-  requireRole('MANAGER', 'ADMIN', 'ENGINEER'),
+  requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN', 'ENGINEER'),
   assessmentController.deleteAssessment,
 );
 
 // Get assessments for specific employee (MANAGER/ADMIN can see anyone; ENGINEER only their own)
 router.get(
   '/employees/:empCode/assessments',
-  requireRole('MANAGER', 'ADMIN', 'ENGINEER'),
+  requireRole('MANAGER', 'LINE_MANAGER', 'TOP_MANAGEMENT', 'ADMIN', 'ENGINEER'),
   (req, res, next) => {
     if (req.user!.role === 'ENGINEER' && req.user!.empCode !== req.params.empCode) {
       res.status(403).json({ success: false, error: 'Access denied' });
@@ -65,7 +65,7 @@ router.get(
 // Get team roster (manager's direct reports)
 router.get(
   '/team-roster',
-  requireRole('MANAGER', 'ADMIN'),
+  requireRole('MANAGER', 'LINE_MANAGER', 'TOP_MANAGEMENT', 'ADMIN'),
   assessmentController.getTeamRoster,
 );
 

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import env from '../config/env';
 import logger from '../config/logger';
+import { RoleCode } from '../types/rbac';
 
 // Extend Express Request type
 declare global {
@@ -11,7 +12,7 @@ declare global {
         id: number;           // User table id (internal)
         employeeId: number;   // Employee table id (internal, used for DB FKs)
         empCode: string;      // Real employee code e.g. "1818" (used in all public APIs)
-        role: 'ADMIN' | 'MANAGER' | 'ENGINEER';
+        role: RoleCode;
         username: string;
       };
     }
@@ -35,7 +36,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
       id: number;
       employeeId: number;
       empCode: string;
-      role: 'ADMIN' | 'MANAGER' | 'ENGINEER';
+      role: RoleCode;
       username: string;
       iat: number;
       exp: number;
