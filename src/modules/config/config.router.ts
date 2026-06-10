@@ -29,6 +29,11 @@ import {
   upsertDomainGradeWeightSchema,
   upsertCompetencyGradeThresholdSchema,
   bulkUpsertCompetencyGradeThresholdsSchema,
+  updateRoleSchema,
+  createDepartmentAssignmentSchema,
+  updateDepartmentAssignmentSchema,
+  createLineManagerAssignmentSchema,
+  updateLineManagerAssignmentSchema,
 } from './config.schema';
 
 const router = Router();
@@ -38,6 +43,20 @@ router.use(authenticate);
 
 // ── Roles (ADMIN only) ───────────────────────────────────────────────────────
 router.get('/roles', requireRole('ADMIN'), configController.listRoles);
+router.patch('/roles/:id', requireRole('ADMIN'), validate(updateRoleSchema), configController.updateRole);
+
+// ── Access Management (ADMIN only) ───────────────────────────────────────────
+router.get('/access/department-assignments', requireRole('ADMIN'), configController.listDepartmentAssignments);
+router.post('/access/department-assignments', requireRole('ADMIN'), validate(createDepartmentAssignmentSchema), configController.createDepartmentAssignment);
+router.patch('/access/department-assignments/:id', requireRole('ADMIN'), validate(updateDepartmentAssignmentSchema), configController.updateDepartmentAssignment);
+router.delete('/access/department-assignments/:id', requireRole('ADMIN'), configController.deleteDepartmentAssignment);
+
+router.get('/access/line-manager-assignments', requireRole('ADMIN'), configController.listLineManagerAssignments);
+router.post('/access/line-manager-assignments', requireRole('ADMIN'), validate(createLineManagerAssignmentSchema), configController.createLineManagerAssignment);
+router.patch('/access/line-manager-assignments/:id', requireRole('ADMIN'), validate(updateLineManagerAssignmentSchema), configController.updateLineManagerAssignment);
+router.delete('/access/line-manager-assignments/:id', requireRole('ADMIN'), configController.deleteLineManagerAssignment);
+
+router.get('/access/audit-logs', requireRole('ADMIN'), configController.listAccessAuditLogs);
 
 // ── Scoring Config (ADMIN only) ──────────────────────────────────────────────
 router.get('/assessment-types', requireRole('ADMIN'), configController.listAssessmentTypeConfigs);

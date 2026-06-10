@@ -14,6 +14,107 @@ export const configController = {
     }
   },
 
+  async updateRole(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.updateRole(parseInt(req.params.id), req.body, req.user?.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update role error');
+      next(error);
+    }
+  },
+
+  // ── Access Management ────────────────────────────────────────────────────
+  async listDepartmentAssignments(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listDepartmentAssignments();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List department assignments error');
+      next(error);
+    }
+  },
+
+  async createDepartmentAssignment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.createDepartmentAssignment(req.body, req.user?.id);
+      res.status(201).json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Create department assignment error');
+      next(error);
+    }
+  },
+
+  async updateDepartmentAssignment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.updateDepartmentAssignment(parseInt(req.params.id), req.body, req.user?.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update department assignment error');
+      next(error);
+    }
+  },
+
+  async deleteDepartmentAssignment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.deleteDepartmentAssignment(parseInt(req.params.id), req.user?.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Delete department assignment error');
+      next(error);
+    }
+  },
+
+  async listLineManagerAssignments(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listLineManagerAssignments();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List line manager assignments error');
+      next(error);
+    }
+  },
+
+  async createLineManagerAssignment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.createLineManagerAssignment(req.body, req.user?.id);
+      res.status(201).json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Create line manager assignment error');
+      next(error);
+    }
+  },
+
+  async updateLineManagerAssignment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.updateLineManagerAssignment(parseInt(req.params.id), req.body, req.user?.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update line manager assignment error');
+      next(error);
+    }
+  },
+
+  async deleteLineManagerAssignment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.deleteLineManagerAssignment(parseInt(req.params.id), req.user?.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Delete line manager assignment error');
+      next(error);
+    }
+  },
+
+  async listAccessAuditLogs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listAccessAuditLogs();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List access audit logs error');
+      next(error);
+    }
+  },
+
   // ── Scoring Config ────────────────────────────────────────────────────────
   async listAssessmentTypeConfigs(req: Request, res: Response, next: NextFunction) {
     try {

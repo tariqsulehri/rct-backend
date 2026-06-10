@@ -313,6 +313,7 @@ model AccessRole {
   updated_at  DateTime @updatedAt
 
   users User[]
+  audit_logs AccessAuditLog[]
 
   @@map("roles")
 }
@@ -343,6 +344,8 @@ model User {
   line_manager_assignments EmployeeLineManagerAssignment[] @relation("LineManagerUser")
   created_department_assignments UserDepartmentAssignment[] @relation("CreatedDepartmentAssignments")
   created_line_manager_assignments EmployeeLineManagerAssignment[] @relation("CreatedLineManagerAssignments")
+  access_audit_actions AccessAuditLog[] @relation("AccessAuditActor")
+  access_audit_targets AccessAuditLog[] @relation("AccessAuditTarget")
 
   @@index([employee_id])
   @@index([role_id])
@@ -399,6 +402,30 @@ model EmployeeLineManagerAssignment {
   @@index([employee_id])
   @@index([is_active])
   @@map("employee_line_manager_assignments")
+}
+
+model AccessAuditLog {
+  id             Int      @id @default(autoincrement())
+  actor_user_id  Int?
+  target_user_id Int?
+  role_id        Int?
+  action         String
+  entity_type    String
+  entity_id      Int?
+  old_value      Json?
+  new_value      Json?
+  created_at     DateTime @default(now())
+
+  actor_user  User?       @relation("AccessAuditActor", fields: [actor_user_id], references: [id], onDelete: SetNull)
+  target_user User?       @relation("AccessAuditTarget", fields: [target_user_id], references: [id], onDelete: SetNull)
+  role        AccessRole? @relation(fields: [role_id], references: [id], onDelete: SetNull)
+
+  @@index([actor_user_id])
+  @@index([target_user_id])
+  @@index([role_id])
+  @@index([entity_type, entity_id])
+  @@index([created_at])
+  @@map("access_audit_logs")
 }
 
 model RefreshToken {

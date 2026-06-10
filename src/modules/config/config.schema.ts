@@ -16,6 +16,42 @@ export const updateUserSchema = z.object({
   is_active: z.boolean().optional(),
 });
 
+export const updateRoleSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().nullable().optional(),
+  is_active: z.boolean().optional(),
+  sort_order: z.number().int().min(0).optional(),
+});
+
+const nullableDateInput = z.coerce.date().nullable().optional();
+
+export const createDepartmentAssignmentSchema = z.object({
+  user_id: z.number().int().positive(),
+  department_id: z.number().int().positive(),
+  assignment_type: z.string().min(1).max(50).default('MANAGER'),
+  can_view: z.boolean().default(true),
+  can_manage: z.boolean().default(false),
+  starts_at: z.coerce.date().optional(),
+  ends_at: nullableDateInput,
+  is_active: z.boolean().default(true),
+});
+
+export const updateDepartmentAssignmentSchema = createDepartmentAssignmentSchema.partial();
+
+export const createLineManagerAssignmentSchema = z.object({
+  manager_user_id: z.number().int().positive(),
+  employee_id: z.number().int().positive(),
+  relationship_type: z.string().min(1).max(50).default('LINE_MANAGER'),
+  can_view: z.boolean().default(true),
+  can_assess: z.boolean().default(true),
+  starts_at: z.coerce.date().optional(),
+  ends_at: nullableDateInput,
+  is_primary: z.boolean().default(false),
+  is_active: z.boolean().default(true),
+});
+
+export const updateLineManagerAssignmentSchema = createLineManagerAssignmentSchema.partial();
+
 export const createEmployeeSchema = z.object({
   emp_code: z.string().min(1).max(20),
   full_name: z.string().min(1).max(200),
@@ -62,6 +98,11 @@ export const updateTechnologySchema = createTechnologySchema.partial();
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;
+export type CreateDepartmentAssignmentInput = z.infer<typeof createDepartmentAssignmentSchema>;
+export type UpdateDepartmentAssignmentInput = z.infer<typeof updateDepartmentAssignmentSchema>;
+export type CreateLineManagerAssignmentInput = z.infer<typeof createLineManagerAssignmentSchema>;
+export type UpdateLineManagerAssignmentInput = z.infer<typeof updateLineManagerAssignmentSchema>;
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
 export type CreateGradeInput = z.infer<typeof createGradeSchema>;

@@ -3,6 +3,11 @@ import bcryptjs from 'bcryptjs';
 import {
   CreateUserInput,
   UpdateUserInput,
+  UpdateRoleInput,
+  CreateDepartmentAssignmentInput,
+  UpdateDepartmentAssignmentInput,
+  CreateLineManagerAssignmentInput,
+  UpdateLineManagerAssignmentInput,
   CreateEmployeeInput,
   UpdateEmployeeInput,
   CreateGradeInput,
@@ -132,9 +137,230 @@ export const configService = {
   async listRoles() {
     await this.ensureRoles();
     return db.accessRole.findMany({
-      where: { is_active: true },
       orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
     });
+  },
+
+  async updateRole(id: number, data: UpdateRoleInput, actorUserId?: number) {
+    const before = await db.accessRole.findUnique({ where: { id } });
+    const updated = await db.accessRole.update({ where: { id }, data });
+    await this.createAccessAuditLog({
+      actorUserId,
+      targetUserId: null,
+      roleId: updated.id,
+      action: 'UPDATE_ROLE',
+      entityType: 'role',
+      entityId: updated.id,
+      oldValue: before,
+      newValue: updated,
+    });
+    return updated;
+  },
+
+  async createAccessAuditLog(input: {
+    actorUserId?: number | null;
+    targetUserId?: number | null;
+    roleId?: number | null;
+    action: string;
+    entityType: string;
+    entityId?: number | null;
+    oldValue?: unknown;
+    newValue?: unknown;
+  }) {
+    return db.accessAuditLog.create({
+      data: {
+        actor_user_id: input.actorUserId ?? null,
+        target_user_id: input.targetUserId ?? null,
+        role_id: input.roleId ?? null,
+        action: input.action,
+        entity_type: input.entityType,
+        entity_id: input.entityId ?? null,
+        old_value: input.oldValue === undefined ? undefined : input.oldValue as any,
+        new_value: input.newValue === undefined ? undefined : input.newValue as any,
+      },
+    });
+  },
+
+  async listAccessAuditLogs() {
+    return db.accessAuditLog.findMany({
+      include: {
+        actor_user: { include: { employee: true } },
+        target_user: { include: { employee: true } },
+        role: true,
+      },
+      orderBy: { created_at: 'desc' },
+      take: 100,
+    });
+  },
+
+  async listDepartmentAssignments() {
+    return db.userDepartmentAssignment.findMany({
+      include: {
+        user: { include: { employee: true, role_ref: true } },
+        department: true,
+        creator: { include: { employee: true } },
+      },
+      orderBy: [{ is_active: 'desc' }, { department: { name: 'asc' } }, { user: { username: 'asc' } }],
+    });
+  },
+
+  async createDepartmentAssignment(data: CreateDepartmentAssignmentInput, actorUserId?: number) {
+    const created = await db.userDepartmentAssignment.upsert({
+      where: {
+        user_id_department_id_assignment_type: {
+          user_id: data.user_id,
+          department_id: data.department_id,
+          assignment_type: data.assignment_type,
+        },
+      },
+      create: { ...data, created_by: actorUserId },
+      update: { ...data, created_by: actorUserId },
+      include: {
+        user: { include: { employee: true, role_ref: true } },
+        department: true,
+        creator: { include: { employee: true } },
+      },
+    });
+    await this.createAccessAuditLog({
+      actorUserId,
+      targetUserId: created.user_id,
+      action: 'UPSERT_DEPARTMENT_ASSIGNMENT',
+      entityType: 'user_department_assignment',
+      entityId: created.id,
+      newValue: created,
+    });
+    return created;
+  },
+
+  async updateDepartmentAssignment(id: number, data: UpdateDepartmentAssignmentInput, actorUserId?: number) {
+    const before = await db.userDepartmentAssignment.findUnique({ where: { id } });
+    const updated = await db.userDepartmentAssignment.update({
+      where: { id },
+      data,
+      include: {
+        user: { include: { employee: true, role_ref: true } },
+        department: true,
+        creator: { include: { employee: true } },
+      },
+    });
+    await this.createAccessAuditLog({
+      actorUserId,
+      targetUserId: updated.user_id,
+      action: 'UPDATE_DEPARTMENT_ASSIGNMENT',
+      entityType: 'user_department_assignment',
+      entityId: id,
+      oldValue: before,
+      newValue: updated,
+    });
+    return updated;
+  },
+
+  async deleteDepartmentAssignment(id: number, actorUserId?: number) {
+    const before = await db.userDepartmentAssignment.findUnique({ where: { id } });
+    const updated = await db.userDepartmentAssignment.update({
+      where: { id },
+      data: { is_active: false, ends_at: new Date() },
+      include: {
+        user: { include: { employee: true, role_ref: true } },
+        department: true,
+        creator: { include: { employee: true } },
+      },
+    });
+    await this.createAccessAuditLog({
+      actorUserId,
+      targetUserId: updated.user_id,
+      action: 'DEACTIVATE_DEPARTMENT_ASSIGNMENT',
+      entityType: 'user_department_assignment',
+      entityId: id,
+      oldValue: before,
+      newValue: updated,
+    });
+    return updated;
+  },
+
+  async listLineManagerAssignments() {
+    return db.employeeLineManagerAssignment.findMany({
+      include: {
+        manager_user: { include: { employee: true, role_ref: true } },
+        employee: { include: { dept: true, current_grade: true, target_grade: true } },
+        creator: { include: { employee: true } },
+      },
+      orderBy: [{ is_active: 'desc' }, { manager_user: { username: 'asc' } }, { employee: { full_name: 'asc' } }],
+    });
+  },
+
+  async createLineManagerAssignment(data: CreateLineManagerAssignmentInput, actorUserId?: number) {
+    const created = await db.employeeLineManagerAssignment.upsert({
+      where: {
+        manager_user_id_employee_id_relationship_type: {
+          manager_user_id: data.manager_user_id,
+          employee_id: data.employee_id,
+          relationship_type: data.relationship_type,
+        },
+      },
+      create: { ...data, created_by: actorUserId },
+      update: { ...data, created_by: actorUserId },
+      include: {
+        manager_user: { include: { employee: true, role_ref: true } },
+        employee: { include: { dept: true, current_grade: true, target_grade: true } },
+        creator: { include: { employee: true } },
+      },
+    });
+    await this.createAccessAuditLog({
+      actorUserId,
+      targetUserId: created.manager_user_id,
+      action: 'UPSERT_LINE_MANAGER_ASSIGNMENT',
+      entityType: 'employee_line_manager_assignment',
+      entityId: created.id,
+      newValue: created,
+    });
+    return created;
+  },
+
+  async updateLineManagerAssignment(id: number, data: UpdateLineManagerAssignmentInput, actorUserId?: number) {
+    const before = await db.employeeLineManagerAssignment.findUnique({ where: { id } });
+    const updated = await db.employeeLineManagerAssignment.update({
+      where: { id },
+      data,
+      include: {
+        manager_user: { include: { employee: true, role_ref: true } },
+        employee: { include: { dept: true, current_grade: true, target_grade: true } },
+        creator: { include: { employee: true } },
+      },
+    });
+    await this.createAccessAuditLog({
+      actorUserId,
+      targetUserId: updated.manager_user_id,
+      action: 'UPDATE_LINE_MANAGER_ASSIGNMENT',
+      entityType: 'employee_line_manager_assignment',
+      entityId: id,
+      oldValue: before,
+      newValue: updated,
+    });
+    return updated;
+  },
+
+  async deleteLineManagerAssignment(id: number, actorUserId?: number) {
+    const before = await db.employeeLineManagerAssignment.findUnique({ where: { id } });
+    const updated = await db.employeeLineManagerAssignment.update({
+      where: { id },
+      data: { is_active: false, ends_at: new Date() },
+      include: {
+        manager_user: { include: { employee: true, role_ref: true } },
+        employee: { include: { dept: true, current_grade: true, target_grade: true } },
+        creator: { include: { employee: true } },
+      },
+    });
+    await this.createAccessAuditLog({
+      actorUserId,
+      targetUserId: updated.manager_user_id,
+      action: 'DEACTIVATE_LINE_MANAGER_ASSIGNMENT',
+      entityType: 'employee_line_manager_assignment',
+      entityId: id,
+      oldValue: before,
+      newValue: updated,
+    });
+    return updated;
   },
 
   // ── Assessment Types ──────────────────────────────────────────────────────
