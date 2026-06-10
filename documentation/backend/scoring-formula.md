@@ -1916,7 +1916,186 @@ Examples:
 
 ---
 
-## 22. Consistency Checklist
+## 22. Scoring Configuration Tables
+
+These tables let admins change scoring behavior without changing code. They are loaded dynamically by the assessment service, so new calculations use the latest active configuration.
+
+Important persistence rule:
+
+```text
+Changing config affects the next calculation.
+Old stored assessment scores do not change until the employee/competency is recomputed.
+```
+
+### 22.1 Type Config
+
+Database table:
+
+```text
+assessment_type_configs
+```
+
+Types describe how important the assessed technology is for the competency.
+
+| Type | Weight | Easy meaning | Calculation effect |
+|---|---:|---|---|
+| `Primary` | `0.25` | Main technology for the competency. | Highest type multiplier. |
+| `Secondary` | `0.15` | Supporting technology. | Medium type multiplier. |
+| `Tertiary` | `0.10` | Related or optional technology. | Lowest type multiplier. |
+
+Columns:
+
+| Column | Affects calculation? | Easy meaning |
+|---|---|---|
+| `code` | Yes | Must match the assessment row type. |
+| `weight` | Yes | Multiplier used in the row score formula. |
+| `label` | No | UI text. |
+| `description` | No | Help text for admins/users. |
+| `sort_order` | No | UI display order. |
+| `is_active` | Yes | Inactive rows are ignored and default values are used. |
+
+Simple rule:
+
+```text
+Higher type weight = higher assessment row score
+```
+
+### 22.2 Level Config
+
+Database table:
+
+```text
+assessment_level_configs
+```
+
+Levels describe how strong the employee is at the technology.
+
+| Level | Weight | Threshold | Easy meaning |
+|---|---:|---:|---|
+| `Expert` | `1.00` | `0.80` | Full credit for this technology. |
+| `Advanced` | `0.80` | `0.60` | Strong skill. |
+| `Proficient` | `0.60` | `0.40` | Working skill. |
+| `Foundational` | `0.40` | `0.20` | Basic skill. |
+| `Beginner` | `0.40` | `0.20` | Early-stage skill. |
+| `Awareness` | `0.20` | `0.01` | Light exposure. |
+| `Unset` | `0.00` | `0.00` | No level selected. |
+
+`weight` and `threshold` are different.
+
+```text
+weight    = calculation multiplier for the row score
+threshold = reporting/classification boundary
+```
+
+Example:
+
+```text
+Expert weight    = 1.00
+Expert threshold = 0.80
+```
+
+This means `1.00` is used when calculating the row score. `0.80` can be used as a boundary for labels, reporting, or future rules.
+
+Columns:
+
+| Column | Affects calculation? | Easy meaning |
+|---|---|---|
+| `code` | Yes | Must match the selected assessment level. |
+| `weight` | Yes | Multiplier used in the row score formula. |
+| `threshold` | Not in row score | Boundary for interpreting/reporting score levels. |
+| `label` | No | UI text. |
+| `description` | No | Help text for admins/users. |
+| `sort_order` | No | UI display order. |
+| `is_active` | Yes | Inactive rows are ignored and default values are used. |
+
+### 22.3 Status Config
+
+Database table:
+
+```text
+assessment_status_configs
+```
+
+Statuses describe the workflow state of an assessment row.
+
+| Status | Counts toward score | Final state | Calculation effect |
+|---|---|---|---|
+| `approved` | Yes | Yes | Included in competency scores. |
+| `pending` | No | No | Ignored by scoring. |
+| `rejected` | No | Yes | Ignored by scoring. |
+| `draft` | No | No | Ignored by scoring. |
+
+Two columns are easy to confuse:
+
+```text
+counts_toward_score = calculation rule
+is_terminal         = workflow rule
+```
+
+`is_terminal` means the workflow state is final. It does not mean the row counts toward score.
+
+Columns:
+
+| Column | Affects calculation? | Easy meaning |
+|---|---|---|
+| `code` | Yes | Must match the assessment row status. |
+| `counts_toward_score` | Yes | Decides whether rows with this status are included in scores. |
+| `is_terminal` | No | Shows whether review/workflow is complete. |
+| `label` | No | UI text. |
+| `description` | No | Help text for admins/users. |
+| `sort_order` | No | UI display order. |
+| `is_active` | Yes | Inactive statuses are ignored by dynamic scoring rules. |
+
+### 22.4 Project Config
+
+Database table:
+
+```text
+assessment_project_configs
+```
+
+Project config describes real project experience.
+
+| Projects | Credit | Threshold | Duration guidance | Easy meaning |
+|---:|---:|---:|---|---|
+| `0` | `0.00` | `0.00` | `0` months | No project experience yet. |
+| `1` | `0.33` | `0.25` | `1-3` months | Used in one project. |
+| `2` | `0.67` | `0.50` | `3-6` months | Used in two projects. |
+| `3+` | `1.00` | `0.75` | `6+` months | Used in three or more projects. |
+
+The row score formula includes base credit, so `0` projects can still receive some score if a level is selected.
+
+The two important numeric columns are:
+
+```text
+credit    = calculation value
+threshold = reporting/classification boundary
+```
+
+Columns:
+
+| Column | Affects calculation? | Easy meaning |
+|---|---|---|
+| `project_count` | Yes | Must match the assessment row project count. |
+| `credit` | Yes | Project experience value used in the score formula. |
+| `threshold` | Not in row score | Reference boundary for reporting or future rules. |
+| `duration_months_min` | No | UI guidance for minimum experience duration. |
+| `duration_months_max` | No | UI guidance for maximum experience duration. |
+| `label` | No | UI text. |
+| `description` | No | Help text for admins/users. |
+| `sort_order` | No | UI display order. |
+| `is_active` | Yes | Inactive rows are ignored and default values are used. |
+
+### 22.5 Safe Admin Guidance
+
+- Keep calculation values between `0` and `1`.
+- Keep only `approved` counting toward score unless the workflow intentionally changes.
+- Do not deactivate required values such as `Primary`, `Expert`, or `approved` unless the code/config fallback is reviewed.
+- Recompute existing scores if reports must reflect changed calculation values immediately.
+
+---
+
+## 23. Consistency Checklist
 
 Use this checklist when changing or reviewing calculation code.
 
@@ -1939,7 +2118,7 @@ Use this checklist when changing or reviewing calculation code.
 
 ---
 
-## 23. Source Files
+## 24. Source Files
 
 | Concern | File |
 |---|---|

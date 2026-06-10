@@ -1,6 +1,9 @@
+# Development backend image.
+# Runs the TypeScript dev server with full dependencies and Prisma Client.
 FROM cgr.dev/chainguard/node:20-dev
 WORKDIR /app
 
+# Install dependencies into the container. Source code is mounted by compose.
 COPY package.json package-lock.json* ./
 RUN npm ci
 
@@ -8,10 +11,11 @@ COPY tsconfig.json ./
 COPY prisma ./prisma
 RUN npx prisma generate
 
-# Source is volume-mounted in docker-compose.dev.yml for hot-reload.
-# This COPY ensures the image works standalone (e.g. CI smoke tests).
+# Compose mounts src for hot reload. This COPY lets the image still run without
+# compose mounts during smoke tests or ad hoc debugging.
 COPY src ./src
 
+# API dev server port.
 EXPOSE 4000
 
 CMD ["npm", "run", "dev"]
