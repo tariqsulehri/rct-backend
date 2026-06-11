@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '../config/logger';
-import { RoleCode } from '../types/rbac';
+import { db } from '../config/database';
+import { PermissionCode, RoleCode } from '../types/rbac';
 
 /**
  * Role-based authorization middleware
@@ -28,6 +29,65 @@ export const requireRole = (...roles: RoleCode[]) => {
     }
 
     next();
+  };
+};
+
+/**
+ * Permission-based authorization middleware.
+ * Phase 3 keeps roles for identity/persona, while permissions decide whether
+ * the user can perform a specific action.
+ */
+export const requirePermission = (...permissions: PermissionCode[]) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          error: 'User not authenticated',
+          code: 'NOT_AUTHENTICATED',
+        });
+        return;
+      }
+
+      const user = await db.user.findUnique({
+        where: { id: req.user.id },
+        select: {
+          role: true,
+          role_ref: {
+            select: {
+              is_active: true,
+              role_permissions: {
+                where: { permission: { code: { in: permissions }, is_active: true } },
+                select: { permission: { select: { code: true } } },
+              },
+            },
+          },
+        },
+      });
+
+      const granted = new Set(user?.role_ref?.role_permissions.map(item => item.permission.code) ?? []);
+      const hasPermission = user?.role_ref?.is_active === true && permissions.some(permission => granted.has(permission));
+
+      if (!hasPermission) {
+        logger.warn(
+          `Permission denied for user ${req.user.id} (${req.user.role}) on ${req.path}; required ${permissions.join(', ')}`
+        );
+        res.status(403).json({
+          error: 'Insufficient permissions',
+          code: 'INSUFFICIENT_PERMISSIONS',
+          requiredPermissions: permissions,
+          userRole: user?.role ?? req.user.role,
+        });
+        return;
+      }
+
+      next();
+    } catch (error) {
+      logger.error({ error, userId: req.user?.id }, 'Permission check failed');
+      res.status(500).json({
+        error: 'Permission check failed',
+        code: 'PERMISSION_CHECK_ERROR',
+      });
+    }
   };
 };
 

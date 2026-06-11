@@ -24,6 +24,10 @@ export const updateRoleSchema = z.object({
   sort_order: z.number().int().min(0).optional(),
 });
 
+export const updateRolePermissionsSchema = z.object({
+  permission_ids: z.array(z.number().int().positive()).default([]),
+});
+
 const nullableDateInput = z.coerce.date().nullable().optional();
 
 export const createDepartmentAssignmentSchema = z.object({
@@ -100,6 +104,7 @@ export const updateTechnologySchema = createTechnologySchema.partial();
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;
+export type UpdateRolePermissionsInput = z.infer<typeof updateRolePermissionsSchema>;
 export type CreateDepartmentAssignmentInput = z.infer<typeof createDepartmentAssignmentSchema>;
 export type UpdateDepartmentAssignmentInput = z.infer<typeof updateDepartmentAssignmentSchema>;
 export type CreateLineManagerAssignmentInput = z.infer<typeof createLineManagerAssignmentSchema>;
@@ -161,6 +166,9 @@ export const createCompetencyCategorySchema = z.object({
   name:        z.string().min(1).max(100),
   description: z.string().optional(),
   color:       z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  weight:      z.number().min(0).max(1).optional(),
+  sort_order:  z.number().int().min(0).optional(),
+  is_active:   z.boolean().optional(),
 });
 export const updateCompetencyCategorySchema = createCompetencyCategorySchema.partial();
 

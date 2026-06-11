@@ -24,6 +24,26 @@ export const configController = {
     }
   },
 
+  async listPermissions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listPermissions();
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List permissions error');
+      next(error);
+    }
+  },
+
+  async updateRolePermissions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.updateRolePermissions(parseInt(req.params.id), req.body, req.user?.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update role permissions error');
+      next(error);
+    }
+  },
+
   // ── Access Management ────────────────────────────────────────────────────
   async listDepartmentAssignments(req: Request, res: Response, next: NextFunction) {
     try {

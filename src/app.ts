@@ -9,6 +9,7 @@ import authRouter from './modules/auth/auth.router';
 import assessmentRouter from './modules/assessment/assessment.router';
 import configRouter from './modules/config/config.router';
 import reportsRouter from './modules/reports/reports.router';
+import aiRouter from './modules/ai/ai.router';
 
 /**
  * Create and configure Express application
@@ -84,6 +85,7 @@ export function createApp(): Express {
   app.use('/api/v1/assessments', assessmentRouter);
   app.use('/api/v1/config', configRouter);
   app.use('/api/v1/reports', reportsRouter);
+  app.use('/api/v1/ai', aiRouter);
 
   // ============================================================================
   // 404 HANDLER

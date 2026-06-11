@@ -31,7 +31,9 @@ import {
   UpsertDomainGradeWeightInput,
   UpsertCompetencyGradeThresholdInput,
   BulkUpsertCompetencyGradeThresholdsInput,
+  UpdateRolePermissionsInput,
 } from './config.schema';
+import { PermissionCode, RoleCode } from '../../types/rbac';
 
 const DEFAULT_ASSESSMENT_TYPE_CONFIGS = [
   {
@@ -99,6 +101,34 @@ const DEFAULT_ROLES = [
   { code: 'ENGINEER' as const, name: 'Engineer', description: 'Own record and own assessment access.', sort_order: 5 },
 ];
 
+const DEFAULT_PERMISSIONS: Array<{
+  code: PermissionCode;
+  name: string;
+  description: string;
+  category: string;
+  sort_order: number;
+}> = [
+  { code: 'config.manage', name: 'Manage Configuration', description: 'Create and update system configuration.', category: 'Configuration', sort_order: 10 },
+  { code: 'users.manage', name: 'Manage Users', description: 'Create, update, activate, and deactivate login users.', category: 'Configuration', sort_order: 20 },
+  { code: 'roles.manage', name: 'Manage Roles', description: 'Update role descriptions, status, and role permissions.', category: 'Configuration', sort_order: 30 },
+  { code: 'assignments.manage', name: 'Manage Access Assignments', description: 'Manage department and line-manager access assignments.', category: 'Access', sort_order: 40 },
+  { code: 'reports.view', name: 'View Reports', description: 'View dashboards and reporting data within assigned scope.', category: 'Reports', sort_order: 50 },
+  { code: 'employees.view', name: 'View Employees', description: 'View employee records within assigned scope.', category: 'Employees', sort_order: 60 },
+  { code: 'employees.manage', name: 'Manage Employees', description: 'Create, update, and archive employee records.', category: 'Employees', sort_order: 70 },
+  { code: 'assessments.manage', name: 'Manage Assessments', description: 'Create and update assessments within assigned scope.', category: 'Assessments', sort_order: 80 },
+  { code: 'assessments.approve', name: 'Approve Assessments', description: 'Approve assessments within assigned scope.', category: 'Assessments', sort_order: 90 },
+  { code: 'self.view', name: 'View Own Profile', description: 'View own employee profile and readiness data.', category: 'Self Service', sort_order: 100 },
+  { code: 'self.assessment_submit', name: 'Submit Own Assessment', description: 'Submit or update own assessment entries when allowed.', category: 'Self Service', sort_order: 110 },
+];
+
+const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
+  ADMIN: DEFAULT_PERMISSIONS.map(permission => permission.code),
+  TOP_MANAGEMENT: ['reports.view', 'employees.view', 'assessments.manage', 'assessments.approve', 'self.view'],
+  MANAGER: ['reports.view', 'employees.view', 'assessments.manage', 'assessments.approve', 'self.view'],
+  LINE_MANAGER: ['reports.view', 'employees.view', 'assessments.manage', 'assessments.approve', 'self.view'],
+  ENGINEER: ['self.view', 'self.assessment_submit'],
+};
+
 async function getDefaultOrganizationId(): Promise<number> {
   const organization = await db.organization.upsert({
     where: { slug: DEFAULT_ORGANIZATION.slug },
@@ -134,11 +164,108 @@ export const configService = {
     ));
   },
 
-  async listRoles() {
+  async ensurePermissions() {
     await this.ensureRoles();
+    await Promise.all(DEFAULT_PERMISSIONS.map((permission) =>
+      db.permission.upsert({
+        where: { code: permission.code },
+        create: { ...permission, is_system: true, is_active: true },
+        update: {
+          name: permission.name,
+          description: permission.description,
+          category: permission.category,
+          sort_order: permission.sort_order,
+          is_active: true,
+        },
+      })
+    ));
+
+    for (const [roleCode, permissionCodes] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+      const role = await db.accessRole.findUnique({ where: { code: roleCode as RoleCode } });
+      if (!role) continue;
+      const permissions = await db.permission.findMany({
+        where: { code: { in: permissionCodes } },
+        select: { id: true },
+      });
+      await Promise.all(permissions.map((permission) =>
+        db.rolePermission.upsert({
+          where: { role_id_permission_id: { role_id: role.id, permission_id: permission.id } },
+          create: { role_id: role.id, permission_id: permission.id },
+          update: {},
+        })
+      ));
+    }
+  },
+
+  async listRoles() {
+    await this.ensurePermissions();
     return db.accessRole.findMany({
+      include: {
+        role_permissions: {
+          include: { permission: true },
+          orderBy: { permission: { sort_order: 'asc' } },
+        },
+      },
       orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
     });
+  },
+
+  async listPermissions() {
+    await this.ensurePermissions();
+    return db.permission.findMany({
+      orderBy: [{ category: 'asc' }, { sort_order: 'asc' }, { code: 'asc' }],
+    });
+  },
+
+  async updateRolePermissions(roleId: number, data: UpdateRolePermissionsInput, actorUserId?: number) {
+    await this.ensurePermissions();
+    const before = await db.accessRole.findUnique({
+      where: { id: roleId },
+      include: { role_permissions: { include: { permission: true } } },
+    });
+
+    const permissions = await db.permission.findMany({
+      where: { id: { in: data.permission_ids }, is_active: true },
+      select: { id: true },
+    });
+    if (permissions.length !== data.permission_ids.length) {
+      throw Object.assign(new Error('One or more selected permissions are inactive or do not exist.'), {
+        statusCode: 400,
+        code: 'INVALID_PERMISSION_SELECTION',
+      });
+    }
+
+    await db.$transaction(async (tx) => {
+      await tx.rolePermission.deleteMany({ where: { role_id: roleId } });
+      if (permissions.length > 0) {
+        await tx.rolePermission.createMany({
+          data: permissions.map((permission) => ({ role_id: roleId, permission_id: permission.id })),
+          skipDuplicates: true,
+        });
+      }
+    });
+
+    const updated = await db.accessRole.findUniqueOrThrow({
+      where: { id: roleId },
+      include: {
+        role_permissions: {
+          include: { permission: true },
+          orderBy: { permission: { sort_order: 'asc' } },
+        },
+      },
+    });
+
+    await this.createAccessAuditLog({
+      actorUserId,
+      roleId,
+      action: 'UPDATE_ROLE_PERMISSIONS',
+      entityType: 'role_permissions',
+      entityId: roleId,
+      oldValue: before,
+      newValue: updated,
+    });
+
+    return updated;
   },
 
   async updateRole(id: number, data: UpdateRoleInput, actorUserId?: number) {
@@ -587,7 +714,7 @@ export const configService = {
   async listCompetencyCategories() {
     return db.competencyCategory.findMany({
       include: { competencies: { select: { id: true } } },
-      orderBy: { name: 'asc' },
+      orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
     });
   },
 

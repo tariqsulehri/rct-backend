@@ -22,6 +22,11 @@ const envSchema = z.object({
   // Cache
   CACHE_TTL: z.coerce.number().default(300),
 
+  // AI
+  OPENAI_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default('gpt-5.4-mini'),
+
 });
 
 const env = envSchema.parse(process.env);
