@@ -13,4 +13,10 @@ router.get(
   aiController.getDashboard,
 );
 
+router.post(
+  '/chat',
+  requireRole('ADMIN', 'TOP_MANAGEMENT', 'MANAGER', 'LINE_MANAGER'),
+  aiController.askDashboard,
+);
+
 export default router;

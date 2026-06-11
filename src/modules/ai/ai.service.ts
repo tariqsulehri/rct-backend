@@ -73,11 +73,44 @@ interface AiDashboardResponse {
   suggestedQuestions: string[];
 }
 
+interface AiChatEvidence {
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'danger' | 'warning' | 'success' | 'info' | 'neutral';
+}
+
+interface AiChatAction {
+  title: string;
+  detail: string;
+  owner: string;
+  timeframe: string;
+  priority: Priority;
+}
+
+interface AiChatResponse {
+  generatedAt: string;
+  model: string | null;
+  aiEnabled: boolean;
+  source: 'openai' | 'deterministic';
+  answer: string;
+  explanation: string;
+  evidence: AiChatEvidence[];
+  actions: AiChatAction[];
+  relatedPeople: RiskPerson[];
+  relatedSkills: SkillAreaInsight[];
+  suggestedQuestions: string[];
+}
+
 const emptyArray = <T>(value: T[] | undefined): T[] => Array.isArray(value) ? value : [];
 
 function clampText(value: unknown, fallback: string, max = 420): string {
   const text = typeof value === 'string' && value.trim() ? value.trim() : fallback;
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function safePercent(value: number): string {
+  return Number.isFinite(value) ? `${Math.round(value)}%` : 'N/A';
 }
 
 function priorityFromGap(gapPct: number): Priority {
@@ -415,6 +448,272 @@ async function callOpenAi(base: AiDashboardResponse, payload: unknown): Promise<
   return base;
 }
 
+function buildDeterministicChat(question: string, base: AiDashboardResponse): AiChatResponse {
+  const q = question.toLowerCase();
+  const topBlockers = base.blockers.slice(0, 5);
+  const topRiskPeople = base.riskPeople.slice(0, 5);
+  const topSkills = base.skillAreas.slice(0, 5);
+  const topRecommendation = base.recommendations[0];
+  const topSkill = topSkills[0];
+  const topPerson = topRiskPeople[0];
+
+  const baseEvidence: AiChatEvidence[] = [
+    {
+      label: 'Readiness',
+      value: safePercent(base.kpis.readinessRatePct),
+      detail: `${base.kpis.readyResources} of ${base.kpis.totalResources} people are ready.`,
+      tone: base.kpis.readinessRatePct >= 75 ? 'success' : base.kpis.readinessRatePct >= 45 ? 'warning' : 'danger',
+    },
+    {
+      label: 'Critical Gaps',
+      value: String(base.kpis.criticalBlockerCount),
+      detail: 'Gaps that need management action first.',
+      tone: base.kpis.criticalBlockerCount > 0 ? 'danger' : 'success',
+    },
+    {
+      label: 'Average Score',
+      value: safePercent(base.kpis.avgAchievedPct),
+      detail: base.kpis.avgRequiredPct > 0 ? `Needed score is ${base.kpis.avgRequiredPct}%.` : 'No needed score is set.',
+      tone: base.kpis.avgRequiredPct > 0 && base.kpis.avgAchievedPct < base.kpis.avgRequiredPct ? 'warning' : 'success',
+    },
+  ];
+
+  let answer = base.summary;
+  let explanation = 'This answer uses current readiness, skill gap, and assessment data.';
+  let evidence = baseEvidence;
+  let actions: AiChatAction[] = [];
+  let relatedPeople = topRiskPeople;
+  let relatedSkills = topSkills;
+
+  if (q.includes('critical') || q.includes('gap') || q.includes('blocker')) {
+    answer = topBlockers.length
+      ? 'Start with the biggest critical gaps. These are the fastest places for managers to take focused action.'
+      : 'No critical gaps are showing right now.';
+    explanation = topBlockers.length
+      ? 'People below needed score in important skills may slow readiness and delivery. Fix the largest gaps first.'
+      : 'The current data does not show blocked skills, but managers should keep assessments updated.';
+    evidence = [
+      ...baseEvidence,
+      ...topBlockers.slice(0, 3).map((item): AiChatEvidence => ({
+        label: item.employee,
+        value: `-${item.gapPct} pts`,
+        detail: `${item.competency} in ${item.domain}`,
+        tone: item.gapPct >= 30 ? 'danger' : 'warning',
+      })),
+    ];
+    actions = topBlockers.slice(0, 3).map((item) => ({
+      title: `Close ${item.competency}`,
+      detail: item.action,
+      owner: 'Line manager',
+      timeframe: item.gapPct >= 30 ? '14 days' : '30 days',
+      priority: priorityFromGap(item.gapPct),
+    }));
+  } else if (q.includes('weak') || q.includes('skill area') || q.includes('skill')) {
+    answer = topSkill
+      ? `${topSkill.domain} needs the most attention right now.`
+      : 'No weak skill area is available yet.';
+    explanation = topSkill
+      ? `This area has the lowest score in the current dataset and can affect multiple people.`
+      : 'Add or approve more skill checks so the dashboard can find weak areas.';
+    evidence = [
+      ...baseEvidence,
+      ...topSkills.slice(0, 4).map((item): AiChatEvidence => ({
+        label: item.domain,
+        value: safePercent(item.averagePct),
+        detail: `${item.assessed} people assessed. ${item.recommendation}`,
+        tone: item.priority === 'critical' ? 'danger' : item.priority === 'warning' ? 'warning' : 'info',
+      })),
+    ];
+    actions = topSkills.slice(0, 3).map((item) => ({
+      title: `Improve ${item.domain}`,
+      detail: item.recommendation,
+      owner: 'Capability lead',
+      timeframe: '30 days',
+      priority: item.priority,
+    }));
+  } else if (q.includes('ready') || q.includes('readiness') || q.includes('promotion')) {
+    answer = `${base.kpis.readyResources} of ${base.kpis.totalResources} people are ready. Readiness is ${base.kpis.readinessRatePct}%.`;
+    explanation = 'To improve readiness quickly, help people who are close to ready first, then work on the largest critical gaps.';
+    evidence = baseEvidence;
+    actions = [
+      {
+        title: 'Lift near-ready people first',
+        detail: `${base.kpis.nearReadyCount} people look close to ready. Review their remaining gaps and assign focused help.`,
+        owner: 'Managers',
+        timeframe: 'This week',
+        priority: base.kpis.nearReadyCount > 0 ? 'warning' : 'neutral',
+      },
+      {
+        title: 'Review critical gaps',
+        detail: 'Use the Critical Gaps list to decide who needs coaching, training, or project exposure.',
+        owner: 'Leadership',
+        timeframe: '14 days',
+        priority: base.kpis.criticalBlockerCount > 0 ? 'critical' : 'neutral',
+      },
+    ];
+  } else if (q.includes('person') || q.includes('people') || q.includes('help') || q.includes('risk')) {
+    answer = topPerson
+      ? `${topPerson.name} needs help first based on current readiness gap.`
+      : 'No high-risk person is listed right now.';
+    explanation = topPerson
+      ? 'This person has one of the largest gaps against the needed score for the target grade.'
+      : 'No person is currently flagged as high risk in the AI dashboard data.';
+    evidence = [
+      ...baseEvidence,
+      ...topRiskPeople.slice(0, 4).map((item): AiChatEvidence => ({
+        label: item.name,
+        value: `${item.gapPct} pts`,
+        detail: `${item.currentGrade} to ${item.targetGrade}; ${item.meets} skills met.`,
+        tone: item.gapPct >= 30 ? 'danger' : 'warning',
+      })),
+    ];
+    actions = topRiskPeople.slice(0, 3).map((item) => ({
+      title: `Help ${item.name}`,
+      detail: item.action,
+      owner: 'Line manager',
+      timeframe: item.gapPct >= 30 ? '14 days' : '30 days',
+      priority: priorityFromGap(item.gapPct),
+    }));
+  } else {
+    answer = topRecommendation?.title ?? base.summary;
+    explanation = topRecommendation?.insight ?? 'This is the best available summary from the current dashboard data.';
+    actions = base.recommendations.slice(0, 3).map((item) => ({
+      title: item.title,
+      detail: item.action,
+      owner: item.owner,
+      timeframe: item.timeframe,
+      priority: item.priority,
+    }));
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    model: null,
+    aiEnabled: false,
+    source: 'deterministic',
+    answer,
+    explanation,
+    evidence,
+    actions,
+    relatedPeople,
+    relatedSkills,
+    suggestedQuestions: [
+      'Who needs help first?',
+      'Which gaps should managers fix this week?',
+      'Which skill area needs investment?',
+      'How can we improve readiness?',
+      'What should leadership decide next?',
+    ],
+  };
+}
+
+function coerceAiChatResponse(value: any, fallback: AiChatResponse, model: string): AiChatResponse {
+  const evidence = emptyArray(value?.evidence).slice(0, 8).map((item: any, index) => ({
+    label: clampText(item?.label, fallback.evidence[index]?.label ?? 'Evidence', 80),
+    value: clampText(item?.value, fallback.evidence[index]?.value ?? 'N/A', 40),
+    detail: clampText(item?.detail, fallback.evidence[index]?.detail ?? '', 220),
+    tone: ['danger', 'warning', 'success', 'info', 'neutral'].includes(item?.tone)
+      ? item.tone
+      : (fallback.evidence[index]?.tone ?? 'neutral'),
+  })).filter((item) => item.label);
+  const actions = emptyArray(value?.actions).slice(0, 6).map((item: any, index) => ({
+    title: clampText(item?.title, fallback.actions[index]?.title ?? 'Recommended action', 120),
+    detail: clampText(item?.detail, fallback.actions[index]?.detail ?? 'Review this item with the team.', 260),
+    owner: clampText(item?.owner, fallback.actions[index]?.owner ?? 'Manager', 80),
+    timeframe: clampText(item?.timeframe, fallback.actions[index]?.timeframe ?? 'This week', 80),
+    priority: ['critical', 'warning', 'positive', 'neutral'].includes(item?.priority)
+      ? item.priority
+      : (fallback.actions[index]?.priority ?? 'neutral'),
+  })).filter((item) => item.title);
+
+  return {
+    ...fallback,
+    aiEnabled: true,
+    source: 'openai',
+    model,
+    answer: clampText(value?.answer, fallback.answer, 500),
+    explanation: clampText(value?.explanation, fallback.explanation, 700),
+    evidence: evidence.length ? evidence : fallback.evidence,
+    actions: actions.length ? actions : fallback.actions,
+    suggestedQuestions: emptyArray(value?.suggestedQuestions).slice(0, 6).map((q) => clampText(q, '', 120)).filter(Boolean).length
+      ? emptyArray(value?.suggestedQuestions).slice(0, 6).map((q) => clampText(q, '', 120)).filter(Boolean)
+      : fallback.suggestedQuestions,
+  };
+}
+
+async function callOpenAiChat(question: string, fallback: AiChatResponse, context: unknown): Promise<AiChatResponse> {
+  const apiKey = env.OPENAI_API_KEY || env.OPENAI_KEY;
+  if (!apiKey) return fallback;
+
+  const candidates = Array.from(new Set([
+    env.OPENAI_MODEL,
+    'gpt-5.4-mini',
+    'gpt-4o-mini',
+    'gpt-4o',
+  ].filter(Boolean)));
+
+  for (const model of candidates) {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        input: [
+          {
+            role: 'system',
+            content: [
+              {
+                type: 'input_text',
+                text: 'You are an AI decision assistant for top management and managers. Use only supplied data. Use simple English for non-native speakers. Return only JSON. Do not expose model names. Do not invent people, scores, skills, or owners.',
+              },
+            ],
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: JSON.stringify({
+                  task: 'Answer the manager question with evidence and clear actions.',
+                  question,
+                  requiredShape: {
+                    answer: 'short direct answer in simple English',
+                    explanation: 'why this answer matters for decision making',
+                    evidence: '3-8 items with label, value, detail, tone',
+                    actions: '1-6 action items with title, detail, owner, timeframe, priority',
+                    suggestedQuestions: '4-6 short follow-up questions',
+                  },
+                  data: context,
+                }),
+              },
+            ],
+          },
+        ],
+        text: { format: { type: 'json_object' } },
+      }),
+    });
+
+    const body: any = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      logger.warn({ status: response.status, model, code: body?.error?.code, message: body?.error?.message }, 'OpenAI AI chat request failed');
+      continue;
+    }
+
+    const text = extractResponseText(body);
+    if (!text) continue;
+    try {
+      return coerceAiChatResponse(JSON.parse(text), fallback, model);
+    } catch (error) {
+      logger.warn({ error, model }, 'OpenAI AI chat response was not valid JSON');
+    }
+  }
+
+  return fallback;
+}
+
 export async function getAiDashboard(userId: number, employeeId: number, role: RoleCode, focus: FocusMode = 'executive') {
   const safeFocus: FocusMode = ['executive', 'risk', 'skills', 'readiness'].includes(focus) ? focus : 'executive';
   const [promoRows, compRows, gaps] = await Promise.all([
@@ -431,5 +730,26 @@ export async function getAiDashboard(userId: number, employeeId: number, role: R
   } catch (error) {
     logger.warn({ error }, 'AI dashboard fell back to deterministic analysis');
     return base;
+  }
+}
+
+export async function askAiDashboard(userId: number, employeeId: number, role: RoleCode, question: string, focus: FocusMode = 'executive') {
+  const safeQuestion = clampText(question, '', 600);
+  const safeFocus: FocusMode = ['executive', 'risk', 'skills', 'readiness'].includes(focus) ? focus : 'executive';
+  const [promoRows, compRows, gaps] = await Promise.all([
+    promotionReadiness(userId, employeeId, role),
+    competencyScores(userId, employeeId, role),
+    gapMatrix(userId, employeeId, role),
+  ]);
+
+  const base = buildDeterministicDashboard(safeFocus, promoRows, compRows, gaps);
+  const payload = buildAiPayload(base, promoRows, compRows, gaps);
+  const fallback = buildDeterministicChat(safeQuestion, base);
+
+  try {
+    return await callOpenAiChat(safeQuestion, fallback, payload);
+  } catch (error) {
+    logger.warn({ error }, 'AI chat fell back to deterministic answer');
+    return fallback;
   }
 }
