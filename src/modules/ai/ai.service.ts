@@ -285,6 +285,18 @@ function coerceAiResponse(value: any, base: AiDashboardResponse, model: string):
     owner: clampText(item?.owner, base.recommendations[index]?.owner ?? 'Leadership', 80),
     timeframe: clampText(item?.timeframe, base.recommendations[index]?.timeframe ?? 'This week', 80),
   }));
+  const aiBlockers = emptyArray(value?.blockers).slice(0, 8).map((item: any, index) => ({
+    employee: clampText(item?.employee, base.blockers[index]?.employee ?? 'Resource', 100),
+    competency: clampText(item?.competency, base.blockers[index]?.competency ?? 'Competency', 140),
+    domain: clampText(item?.domain, base.blockers[index]?.domain ?? 'Skill area', 100),
+    gapPct: Number.isFinite(Number(item?.gapPct)) ? Number(item.gapPct) : (base.blockers[index]?.gapPct ?? 0),
+    action: clampText(item?.action, base.blockers[index]?.action ?? 'Assign a remediation action.', 220),
+  })).filter((item) => item.employee && item.competency);
+  const blockerKeys = new Set(aiBlockers.map((item) => `${item.employee}|${item.competency}|${item.domain}`));
+  const completeBlockers = [
+    ...aiBlockers,
+    ...base.blockers.filter((item) => !blockerKeys.has(`${item.employee}|${item.competency}|${item.domain}`)),
+  ].slice(0, 8);
 
   return {
     ...base,
@@ -311,13 +323,7 @@ function coerceAiResponse(value: any, base: AiDashboardResponse, model: string):
       priority: ['critical', 'warning', 'positive', 'neutral'].includes(item?.priority) ? item.priority : (base.skillAreas[index]?.priority ?? 'neutral'),
       recommendation: clampText(item?.recommendation, base.skillAreas[index]?.recommendation ?? 'Prioritize focused enablement.', 240),
     })).filter((item) => item.domain) || base.skillAreas,
-    blockers: emptyArray(value?.blockers).slice(0, 8).map((item: any, index) => ({
-      employee: clampText(item?.employee, base.blockers[index]?.employee ?? 'Resource', 100),
-      competency: clampText(item?.competency, base.blockers[index]?.competency ?? 'Competency', 140),
-      domain: clampText(item?.domain, base.blockers[index]?.domain ?? 'Skill area', 100),
-      gapPct: Number.isFinite(Number(item?.gapPct)) ? Number(item.gapPct) : (base.blockers[index]?.gapPct ?? 0),
-      action: clampText(item?.action, base.blockers[index]?.action ?? 'Assign a remediation action.', 220),
-    })).filter((item) => item.employee && item.competency) || base.blockers,
+    blockers: completeBlockers.length ? completeBlockers : base.blockers,
     strengths: emptyArray(value?.strengths).slice(0, 4).map((item: any, index) => ({
       domain: clampText(item?.domain, base.strengths[index]?.domain ?? 'Skill area', 100),
       averagePct: Number.isFinite(Number(item?.averagePct)) ? Number(item.averagePct) : (base.strengths[index]?.averagePct ?? 0),
@@ -373,7 +379,7 @@ async function callOpenAi(base: AiDashboardResponse, payload: unknown): Promise<
                     recommendations: 'up to 5 items with title, insight, action, priority, owner, timeframe',
                     riskPeople: 'up to 6 people with action',
                     skillAreas: 'up to 6 weakest skill areas with recommendation',
-                    blockers: 'up to 8 critical blockers with action',
+                    blockers: 'exactly the supplied top 8 critical blockers when 8 are available, each with action',
                     strengths: 'up to 4 strengths to reuse',
                     suggestedQuestions: '4-6 short follow-up questions',
                   },
