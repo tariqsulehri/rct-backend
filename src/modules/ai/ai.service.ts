@@ -482,8 +482,8 @@ function buildDeterministicChat(question: string, base: AiDashboardResponse): Ai
   let explanation = 'This answer uses current readiness, skill gap, and assessment data.';
   let evidence = baseEvidence;
   let actions: AiChatAction[] = [];
-  let relatedPeople = topRiskPeople;
-  let relatedSkills = topSkills;
+  const relatedPeople = topRiskPeople;
+  const relatedSkills = topSkills;
 
   if (q.includes('critical') || q.includes('gap') || q.includes('blocker')) {
     answer = topBlockers.length

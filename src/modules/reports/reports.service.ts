@@ -102,7 +102,7 @@ export async function gapAnalysis(employeeId: number) {
 
   const employee = await db.employee.findUnique({
     where: { id: employeeId },
-    include: { current_grade: true, target_grade: true },
+    include: { current_grade: true, target_grade: true, dept: true },
   });
   if (!employee) throw Object.assign(new Error('Employee not found'), { statusCode: 404 });
 
@@ -162,6 +162,7 @@ export async function gapAnalysis(employeeId: number) {
       id: employee.id,
       emp_code: employee.emp_code,
       full_name: employee.full_name,
+      department: employee.dept?.name ?? employee.department,
       current_grade: employee.current_grade.code,
       target_grade: employee.target_grade.code,
     },
@@ -193,12 +194,12 @@ async function getEmployeesForManager(userId: number, managerId: number, role: R
         id: { in: scopedIds },
         deleted_at: null,
       },
-      include: { current_grade: true, target_grade: true },
+      include: { current_grade: true, target_grade: true, dept: true },
     });
   }
   return db.employee.findMany({
     where: { id: { in: scopedIds }, deleted_at: null },
-    include: { current_grade: true, target_grade: true },
+    include: { current_grade: true, target_grade: true, dept: true },
   });
 }
 
@@ -250,6 +251,7 @@ export async function promotionReadiness(userId: number, managerId: number, role
       employee_id: emp.id,
       emp_code: emp.emp_code,
       full_name: emp.full_name,
+      department: emp.dept?.name ?? emp.department,
       current_grade: emp.current_grade.code,
       target_grade: emp.target_grade.code,
       overall_score,
@@ -294,6 +296,7 @@ export async function competencyScores(userId: number, managerId: number, role: 
       employee_id: emp.id,
       full_name: emp.full_name,
       emp_code: emp.emp_code,
+      department: emp.dept?.name ?? emp.department,
       current_grade: emp.current_grade.code,
       current_grade_title: emp.current_grade.title,
       target_grade: emp.target_grade.code,
@@ -410,6 +413,7 @@ export async function competencyMatrix(userId: number, managerId: number, role: 
       employee_id: emp.id,
       emp_code: emp.emp_code,
       full_name: emp.full_name,
+      department: emp.dept?.name ?? emp.department,
       current_grade: emp.current_grade.code,
       target_grade: emp.target_grade.code,
       overall_score,
@@ -458,7 +462,7 @@ export async function gapMatrix(userId: number, managerId: number, role: RoleCod
   const storedScores = await getStoredCompScores(employeeIds);
 
   const results: Array<{
-    employee_id: number; emp_code: string; full_name: string;
+    employee_id: number; emp_code: string; full_name: string; department: string;
     current_grade: string; target_grade: string;
     overall_score: number; overall_threshold: number; overall_gap: number;
     meets_count: number; total_with_threshold: number; promotion_ready: boolean;
@@ -520,6 +524,7 @@ export async function gapMatrix(userId: number, managerId: number, role: RoleCod
 
     results.push({
       employee_id: emp.id, emp_code: emp.emp_code, full_name: emp.full_name,
+      department: emp.dept?.name ?? emp.department,
       current_grade: emp.current_grade.code, target_grade: emp.target_grade.code,
       overall_score, overall_threshold, overall_gap: overall_score - overall_threshold,
       meets_count, total_with_threshold,
@@ -566,6 +571,7 @@ export async function skillsSummary(userId: number, managerId: number, role: Rol
       employee_id: emp.id,
       emp_code: emp.emp_code,
       full_name: emp.full_name,
+      department: emp.dept?.name ?? emp.department,
       current_grade: emp.current_grade.code,
       target_grade: emp.target_grade.code,
       domain_scores,

@@ -575,7 +575,7 @@ const EMPLOYEES = [
   { name: 'Sumama Zaeem',             code: '2936', current: 'G14', target: 'G15', dept: 'DevOps' },
   { name: 'Syed Asad Raza',           code: '2689', current: 'G15', target: 'G16', dept: 'DevOps' },
   { name: 'Tamoor Ahmad',             code: '2166', current: 'G17', target: 'G18', dept: 'DevOps' },
-  { name: 'Tariq Mahmood',             code: '1363', current: 'G18', target: 'G19', dept: 'Engineering' },
+  { name: 'Tariq Mahmood',             code: '1363', current: 'G18', target: 'G19', dept: 'DevOps' },
   { name: 'Wajahat Razi Malik',       code: '2999', current: 'G14', target: 'G15', dept: 'DevOps' },
   { name: 'Zain ul Abdeen',           code: '1392', current: 'G16', target: 'G17', dept: 'DevOps' },
   { name: 'Zerq Jehan Ahmed',         code: '3135', current: 'G15', target: 'G16', dept: 'DevOps' },
@@ -646,19 +646,29 @@ async function main() {
   }
 
   // 3. Department Grades
-  console.log('📊 Department Grades (G13–G21)...');
+  console.log('📊 DevOps Grades (G13–G21 from source workbook)...');
   const gradeMap: Record<string, Record<string, number>> = {};
   for (const [departmentName, departmentId] of Object.entries(departmentMap)) {
     gradeMap[departmentName] = {};
-    for (const g of GRADES) {
-      const grade = await prisma.grade.upsert({
-        where: { department_id_code: { department_id: departmentId, code: g.code } },
-        update: { title: g.title, level: g.level, experience_years: g.experience_years, performance_note: g.performance_note },
-        create: { ...g, department_id: departmentId },
-      });
-      gradeMap[departmentName][g.code] = grade.id;
+
+    if (departmentName === 'DevOps') {
+      for (const g of GRADES) {
+        const grade = await prisma.grade.upsert({
+          where: { department_id_code: { department_id: departmentId, code: g.code } },
+          update: { title: g.title, level: g.level, experience_years: g.experience_years, performance_note: g.performance_note },
+          create: { ...g, department_id: departmentId },
+        });
+        gradeMap[departmentName][g.code] = grade.id;
+      }
+      console.log(`  ✅ ${departmentName}: ${GRADES.length} workbook grades`);
+      continue;
     }
-    console.log(`  ✅ ${departmentName}: ${GRADES.length} grades`);
+
+    const existingGrades = await prisma.grade.findMany({ where: { department_id: departmentId } });
+    for (const grade of existingGrades) {
+      gradeMap[departmentName][grade.code] = grade.id;
+    }
+    console.log(`  ↳ ${departmentName}: ${existingGrades.length} manually defined grades`);
   }
 
   // 4. Competency Categories (Technical / Behavioral)
@@ -788,6 +798,7 @@ async function main() {
         email,
         current_grade_id: currentGradeId,
         target_grade_id: targetGradeId,
+        deleted_at: null,
       },
       create: {
         organization_id: organization.id,
@@ -805,12 +816,13 @@ async function main() {
   }
 
   // Manager relationships: G17+ are managers
-  const seniorCodes = new Set(['1818', '2166', '1139', '1392']);
+  const seniorCodes = new Set(['1818', '2166', '1139', '1363', '1392']);
   const managerId1 = employeeMap['2166']; // Tamoor Ahmad G17 - manages G13-G15
   const managerId2 = employeeMap['1818']; // Abu Bakar Riaz G17 - manages G15-G16
   if (managerId1 && managerId2) {
     for (const emp of EMPLOYEES) {
       if (seniorCodes.has(emp.code)) continue;
+      if (!employeeMap[emp.code]) continue;
       const mgr = ['G13', 'G14'].includes(emp.current) ? managerId1 : managerId2;
       await prisma.employee.update({ where: { id: employeeMap[emp.code] }, data: { manager_id: mgr } });
     }
@@ -872,6 +884,11 @@ async function main() {
     { username: '2754', role: 'ENGINEER', empCode: '2754', label: 'Farhan Hameed G15' },
     { username: '2734', role: 'ENGINEER', empCode: '2734', label: 'Muhammad Bilal G14' },
   ] as const;
+
+  await prisma.user.updateMany({
+    where: { username: '1392', role: 'ADMIN' },
+    data: { is_active: false },
+  });
 
   for (const u of users) {
     const empId = employeeMap[u.empCode];

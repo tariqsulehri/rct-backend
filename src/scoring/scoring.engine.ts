@@ -40,6 +40,10 @@ export function roundScore(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+export function clampScore(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
 export function computeAssessmentScore(
   type: string,
   projects: number,
@@ -97,7 +101,7 @@ export function computeCompetencyScore(
 
     return sum + assessmentScore;
   }, 0);
-  const score = roundScore(totalScore);
+  const score = roundScore(clampScore(totalScore));
 
   return {
     score,

@@ -53,6 +53,20 @@ describe('scoring engine', () => {
     });
   });
 
+  it('caps competency scores at 100 percent', () => {
+    expect(
+      computeCompetencyScore([
+        { type: 'Primary', projects: 3, level: 'Expert', storedScore: '0.50' },
+        { type: 'Primary', projects: 3, level: 'Expert', storedScore: '0.50' },
+        { type: 'Secondary', projects: 3, level: 'Expert', storedScore: 0.3 },
+      ]),
+    ).toEqual({
+      score: 1,
+      starRating: 5,
+      levelLabel: 'L4 Expert',
+    });
+  });
+
   it('falls back to live assessment computation for legacy zero scores', () => {
     expect(
       computeCompetencyScore([

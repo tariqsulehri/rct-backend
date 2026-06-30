@@ -24,7 +24,7 @@ export const authService = {
       },
     });
 
-    if (!user || !user.is_active) {
+    if (!user || !user.is_active || user.employee.deleted_at) {
       throw {
         statusCode: 401,
         code: 'USER_NOT_FOUND',
@@ -68,6 +68,14 @@ export const authService = {
         statusCode: 401,
         code: 'INVALID_CREDENTIALS',
         message: 'Invalid username or password',
+      };
+    }
+
+    if (!user.is_active || user.employee.deleted_at) {
+      throw {
+        statusCode: 401,
+        code: 'USER_NOT_FOUND',
+        message: 'User not found or inactive',
       };
     }
 
@@ -194,7 +202,7 @@ export const authService = {
       include: { employee: true },
     });
 
-    if (!user || !user.is_active) {
+    if (!user || !user.is_active || user.employee.deleted_at) {
       throw {
         statusCode: 401,
         code: 'USER_NOT_FOUND',
