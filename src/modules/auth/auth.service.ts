@@ -8,8 +8,45 @@ import env from '../../config/env';
 import { LoginRequest, LoginResponse } from './auth.schema';
 
 type LoginResult = LoginResponse & { refreshToken: string };
+type CurrentUserResult = LoginResponse['user'];
 
 export const authService = {
+  async getCurrentUser(userId: number): Promise<CurrentUserResult> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        employee: {
+          include: {
+            current_grade: true,
+            target_grade: true,
+          },
+        },
+      },
+    });
+
+    if (!user || !user.is_active) {
+      throw {
+        statusCode: 401,
+        code: 'USER_NOT_FOUND',
+        message: 'User not found or inactive',
+      };
+    }
+
+    return {
+      id: user.id,
+      employeeId: user.employee_id,
+      empCode: user.employee.emp_code,
+      username: user.username,
+      role: user.role,
+      employeeName: user.employee.full_name,
+      department: user.employee.department,
+      currentGrade: user.employee.current_grade.code,
+      currentGradeTitle: user.employee.current_grade.title,
+      targetGrade: user.employee.target_grade.code,
+      targetGradeTitle: user.employee.target_grade.title,
+    };
+  },
+
   async login(request: LoginRequest): Promise<LoginResult> {
     const { username, password } = request;
 

@@ -671,6 +671,7 @@ export const configService = {
         employee_id: data.employee_id,
         is_active: data.is_active ?? true,
       },
+      include: { employee: true, role_ref: true },
     });
   },
 
@@ -703,11 +704,19 @@ export const configService = {
       updateData.password_hash = await bcryptjs.hash(data.password, 12);
       delete updateData.password;
     }
-    return db.user.update({ where: { id }, data: updateData });
+    return db.user.update({
+      where: { id },
+      data: updateData,
+      include: { employee: true, role_ref: true },
+    });
   },
 
   async deleteUser(id: number) {
-    return db.user.update({ where: { id }, data: { is_active: false } });
+    return db.user.update({
+      where: { id },
+      data: { is_active: false },
+      include: { employee: true, role_ref: true },
+    });
   },
 
   // ── Competency Categories ──────────────────────────────────────────────────

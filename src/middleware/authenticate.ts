@@ -3,6 +3,7 @@ import jwt, { SignOptions } from 'jsonwebtoken';
 import env from '../config/env';
 import logger from '../config/logger';
 import { RoleCode } from '../types/rbac';
+import { db } from '../config/database';
 
 // Extend Express Request type
 declare global {
@@ -19,7 +20,7 @@ declare global {
   }
 }
 
-export const authenticate = (req: Request, res: Response, next: NextFunction) => {
+export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -42,12 +43,24 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
       exp: number;
     };
 
+    const user = await db.user.findUnique({
+      where: { id: decoded.id },
+      include: { employee: { select: { id: true, emp_code: true } } },
+    });
+
+    if (!user || !user.is_active || !user.employee) {
+      return res.status(401).json({
+        error: 'User not found or inactive',
+        code: 'USER_NOT_ACTIVE',
+      });
+    }
+
     req.user = {
-      id: decoded.id,
-      employeeId: decoded.employeeId,
-      empCode: decoded.empCode,
-      role: decoded.role,
-      username: decoded.username,
+      id: user.id,
+      employeeId: user.employee.id,
+      empCode: user.employee.emp_code,
+      role: user.role,
+      username: user.username,
     };
 
     return next();

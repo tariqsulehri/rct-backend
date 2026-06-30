@@ -19,6 +19,31 @@ function getCookie(req: Request, name: string): string | undefined {
 }
 
 export const authController = {
+  async me(req: Request, res: Response) {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          error: 'User not authenticated',
+          code: 'NOT_AUTHENTICATED',
+        });
+        return;
+      }
+
+      const user = await authService.getCurrentUser(req.user.id);
+      res.status(200).json({ user });
+    } catch (error: any) {
+      const statusCode = error.statusCode || 500;
+      const code = error.code || 'CURRENT_USER_ERROR';
+      const message = error.message || 'Failed to load current user';
+
+      logger.warn(`Current user lookup failed: ${code}`);
+      res.status(statusCode).json({
+        error: message,
+        code,
+      });
+    }
+  },
+
   async login(req: Request, res: Response) {
     try {
       const result = await authService.login(req.body);

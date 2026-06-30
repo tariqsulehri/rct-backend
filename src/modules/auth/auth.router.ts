@@ -29,6 +29,12 @@ router.post('/login', loginLimiter, validate(loginSchema), authController.login)
 router.post('/refresh', authController.refresh);
 
 /**
+ * GET /api/v1/auth/me
+ * Return latest user identity from the database.
+ */
+router.get('/me', authenticate, authController.me);
+
+/**
  * POST /api/v1/auth/logout
  * Logout - revoke refresh token and clear cookie
  */
