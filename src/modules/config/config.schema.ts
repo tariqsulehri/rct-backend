@@ -70,6 +70,7 @@ export const createEmployeeSchema = z.object({
 export const updateEmployeeSchema = createEmployeeSchema.partial();
 
 export const createGradeSchema = z.object({
+  department_id: z.number().int().positive(),
   code: z.string().min(1).max(10),
   title: z.string().min(1).max(100),
   level: z.number().int().min(1),

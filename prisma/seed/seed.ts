@@ -632,20 +632,36 @@ async function main() {
   });
   console.log(`  ✅ ${organization.name}`);
 
-  // 2. Grades
-  console.log('📊 Grades (G13–G21)...');
-  const gradeMap: Record<string, number> = {};
-  for (const g of GRADES) {
-    const grade = await prisma.grade.upsert({
-      where: { code: g.code },
-      update: { title: g.title, level: g.level, experience_years: g.experience_years, performance_note: g.performance_note },
-      create: g,
+  // 2. Departments
+  console.log('\n🏬 Departments...');
+  const departmentMap: Record<string, number> = {};
+  for (const departmentName of [...new Set(EMPLOYEES.map((emp) => emp.dept))]) {
+    const department = await prisma.department.upsert({
+      where: { organization_id_name: { organization_id: organization.id, name: departmentName } },
+      update: {},
+      create: { organization_id: organization.id, name: departmentName },
     });
-    gradeMap[g.code] = grade.id;
-    console.log(`  ✅ ${g.code}: ${g.title}`);
+    departmentMap[departmentName] = department.id;
+    console.log(`  ✅ ${departmentName}`);
   }
 
-  // 3. Competency Categories (Technical / Behavioral)
+  // 3. Department Grades
+  console.log('📊 Department Grades (G13–G21)...');
+  const gradeMap: Record<string, Record<string, number>> = {};
+  for (const [departmentName, departmentId] of Object.entries(departmentMap)) {
+    gradeMap[departmentName] = {};
+    for (const g of GRADES) {
+      const grade = await prisma.grade.upsert({
+        where: { department_id_code: { department_id: departmentId, code: g.code } },
+        update: { title: g.title, level: g.level, experience_years: g.experience_years, performance_note: g.performance_note },
+        create: { ...g, department_id: departmentId },
+      });
+      gradeMap[departmentName][g.code] = grade.id;
+    }
+    console.log(`  ✅ ${departmentName}: ${GRADES.length} grades`);
+  }
+
+  // 4. Competency Categories (Technical / Behavioral)
   // Remove stale categories that were created before the domain/category split
   console.log('\n🏷️  Competency Categories...');
   const validCategoryNames = COMPETENCY_CATEGORIES.map(c => c.name);
@@ -663,7 +679,7 @@ async function main() {
     console.log(`  ✅ ${cat.name} (${cat.color})`);
   }
 
-  // 4. Skill Domains (with colors)
+  // 5. Skill Domains (with colors)
   console.log('\n🧩 Skill Domains (7 areas)...');
   const domainMap: Record<string, number> = {};
   for (const d of SKILL_DOMAINS) {
@@ -676,7 +692,7 @@ async function main() {
     console.log(`  ✅ ${d.name} (${d.color})`);
   }
 
-  // 5. Competencies + Domain Mappings + Technologies
+  // 6. Competencies + Domain Mappings + Technologies
   console.log('\n📋 Competencies (21), Domain Mappings, and Technologies...');
   const competencyMap: Record<string, number> = {};
   let totalTech = 0;
@@ -731,7 +747,7 @@ async function main() {
     console.log(`  ✅ ${c.name} [${c.domains.join(', ')}] (${c.category}) — ${c.technologies.length} techs`);
   }
 
-  // 6. Competency Levels L1–L5
+  // 7. Competency Levels L1–L5
   console.log('\n🎯 Competency Levels (L1–L5)...');
   const LEVELS = [
     { level: 1, label: 'L1 – Awareness / Foundation',  summary: 'Understands fundamentals and basic concepts' },
@@ -751,26 +767,13 @@ async function main() {
   }
   console.log(`  ✅ ${Object.keys(competencyMap).length * 5} levels created`);
 
-  // 7. Departments
-  console.log('\n🏬 Departments...');
-  const departmentMap: Record<string, number> = {};
-  for (const departmentName of [...new Set(EMPLOYEES.map((emp) => emp.dept))]) {
-    const department = await prisma.department.upsert({
-      where: { organization_id_name: { organization_id: organization.id, name: departmentName } },
-      update: {},
-      create: { organization_id: organization.id, name: departmentName },
-    });
-    departmentMap[departmentName] = department.id;
-    console.log(`  ✅ ${departmentName}`);
-  }
-
   // 8. Employees (28 real engineers)
   console.log('\n👥 Employees (28 engineers)...');
   const employeeMap: Record<string, number> = {};
 
   for (const emp of EMPLOYEES) {
-    const currentGradeId = gradeMap[emp.current];
-    const targetGradeId  = gradeMap[emp.target];
+    const currentGradeId = gradeMap[emp.dept]?.[emp.current];
+    const targetGradeId  = gradeMap[emp.dept]?.[emp.target];
     if (!currentGradeId || !targetGradeId) { console.warn(`  ⚠️  Grade not found for ${emp.name}`); continue; }
 
     const email = `${emp.name.toLowerCase().replace(/[^a-z\s]/g, '').trim().replace(/\s+/g, '.')}@company.com`;
@@ -824,7 +827,7 @@ async function main() {
     const compId = competencyMap[compName];
     if (!compId) continue;
     for (const gradeCode of matrixGrades) {
-      const gradeId   = gradeMap[gradeCode];
+      const gradeId   = gradeMap['DevOps']?.[gradeCode];
       const threshold = gradeScores[gradeCode];
       if (!gradeId || threshold === undefined) continue;
       await prisma.gradeMatrix.upsert({
@@ -845,7 +848,7 @@ async function main() {
     const domainId = domainMap[domainName];
     if (!domainId) { console.warn(`  ⚠️  Domain not found: ${domainName}`); continue; }
     for (const gradeCode of domainGradeWeightGrades) {
-      const gradeId = gradeMap[gradeCode];
+      const gradeId = gradeMap['DevOps']?.[gradeCode];
       const weight  = gradeWeights[gradeCode];
       if (!gradeId || weight === undefined) continue;
       await prisma.skillDomainGradeWeight.upsert({

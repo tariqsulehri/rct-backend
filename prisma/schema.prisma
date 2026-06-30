@@ -16,17 +16,21 @@ datasource db {
 
 model Grade {
   id               Int     @id @default(autoincrement())
-  code             String  @unique
+  department_id    Int
+  code             String
   title            String
   level            Int
   experience_years Int
   performance_note String?
 
+  department           Department                 @relation(fields: [department_id], references: [id], onDelete: Cascade)
   employees_current    Employee[]               @relation("CurrentGrade")
   employees_target     Employee[]               @relation("TargetGrade")
   grade_matrices       GradeMatrix[]
   domain_grade_weights SkillDomainGradeWeight[]
 
+  @@unique([department_id, code])
+  @@index([department_id])
   @@index([level])
   @@map("grades")
 }
@@ -213,6 +217,7 @@ model Department {
   organization   Organization             @relation(fields: [organization_id], references: [id], onDelete: Restrict)
   employees      Employee[]
   config         DepartmentConfig?
+  grades         Grade[]
   domain_weights DepartmentDomainWeight[]
   grade_matrices GradeMatrix[]
   competency_domain_maps CompetencyDomainMap[]

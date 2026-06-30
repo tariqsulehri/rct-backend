@@ -22,18 +22,6 @@ const db = new PrismaClient();
 const ARCHITECT_GRADES = ['G17', 'G18', 'G19', 'G20', 'G21'];
 
 async function main() {
-  const grades = await db.grade.findMany({
-    where: { code: { in: ARCHITECT_GRADES } },
-    select: { id: true, code: true },
-  });
-  console.log('Architect grades found:', grades.map((g) => g.code).join(', '));
-
-  const competencies = await db.competency.findMany({
-    select: { id: true, name: true },
-    orderBy: { name: 'asc' },
-  });
-  console.log(`Competencies: ${competencies.length}`);
-
   const organization = await db.organization.upsert({
     where: { slug: 'tkxel' },
     update: { name: 'tkxel', logo_url: '/assets/organizations/tkxel-logo.svg', base_url: 'https://tkxel.com' },
@@ -48,6 +36,17 @@ async function main() {
       description: 'Default department for the current DevOps scoring data.',
     },
   });
+  const grades = await db.grade.findMany({
+    where: { department_id: devOpsDepartment.id, code: { in: ARCHITECT_GRADES } },
+    select: { id: true, code: true },
+  });
+  console.log('Architect grades found:', grades.map((g) => g.code).join(', '));
+
+  const competencies = await db.competency.findMany({
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+  console.log(`Competencies: ${competencies.length}`);
 
   let inserted = 0;
   let skipped  = 0;

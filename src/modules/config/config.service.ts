@@ -152,6 +152,33 @@ async function getDefaultDepartmentId(): Promise<number> {
   return department.id;
 }
 
+async function validateEmployeeGradesForDepartment(
+  departmentId: number | null | undefined,
+  currentGradeId: number,
+  targetGradeId: number,
+) {
+  if (!departmentId) {
+    throw Object.assign(new Error('Please select a department before assigning grades.'), {
+      statusCode: 400,
+      code: 'DEPARTMENT_REQUIRED_FOR_GRADES',
+    });
+  }
+
+  const gradeCount = await db.grade.count({
+    where: {
+      id: { in: [currentGradeId, targetGradeId] },
+      department_id: departmentId,
+    },
+  });
+
+  if (gradeCount !== new Set([currentGradeId, targetGradeId]).size) {
+    throw Object.assign(new Error('Selected current and target grades must belong to the employee department.'), {
+      statusCode: 400,
+      code: 'GRADE_DEPARTMENT_MISMATCH',
+    });
+  }
+}
+
 export const configService = {
   // ── Roles ─────────────────────────────────────────────────────────────────
   async ensureRoles() {
@@ -841,6 +868,7 @@ export const configService = {
 
   async createEmployee(data: CreateEmployeeInput) {
     const organizationId = await getDefaultOrganizationId();
+    await validateEmployeeGradesForDepartment(data.department_id, data.current_grade_id, data.target_grade_id);
     return db.employee.create({
       data: {
         organization_id: organizationId,
@@ -857,7 +885,15 @@ export const configService = {
   },
 
   async updateEmployee(id: number, data: UpdateEmployeeInput) {
+    const existing = await db.employee.findUniqueOrThrow({
+      where: { id },
+      select: { department_id: true, current_grade_id: true, target_grade_id: true },
+    });
     const { department_id, ...rest } = data as any;
+    const nextDepartmentId = department_id === undefined ? existing.department_id : department_id;
+    const nextCurrentGradeId = data.current_grade_id ?? existing.current_grade_id;
+    const nextTargetGradeId = data.target_grade_id ?? existing.target_grade_id;
+    await validateEmployeeGradesForDepartment(nextDepartmentId, nextCurrentGradeId, nextTargetGradeId);
     return db.employee.update({
       where: { id },
       data: { ...rest, department_id: department_id ?? null },
@@ -870,15 +906,18 @@ export const configService = {
 
   // ── Grades ─────────────────────────────────────────────────────────────────
   async listGrades() {
-    return db.grade.findMany({ orderBy: { level: 'asc' } });
+    return db.grade.findMany({
+      include: { department: true },
+      orderBy: [{ department: { name: 'asc' } }, { level: 'asc' }, { code: 'asc' }],
+    });
   },
 
   async createGrade(data: CreateGradeInput) {
-    return db.grade.create({ data });
+    return db.grade.create({ data, include: { department: true } });
   },
 
   async updateGrade(id: number, data: UpdateGradeInput) {
-    return db.grade.update({ where: { id }, data });
+    return db.grade.update({ where: { id }, data, include: { department: true } });
   },
 
   async deleteGrade(id: number) {
