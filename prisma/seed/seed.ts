@@ -548,7 +548,7 @@ const COMPETENCIES: {
   },
 ];
 
-// 28 employees from Resources sheet
+// Employees from Resources sheet plus leadership test accounts
 const EMPLOYEES = [
   { name: 'Abdullah Maqsood',         code: '3363', current: 'G15', target: 'G16', dept: 'DevOps' },
   { name: 'Abu Bakar Riaz',           code: '1818', current: 'G17', target: 'G18', dept: 'DevOps' },
@@ -575,6 +575,7 @@ const EMPLOYEES = [
   { name: 'Sumama Zaeem',             code: '2936', current: 'G14', target: 'G15', dept: 'DevOps' },
   { name: 'Syed Asad Raza',           code: '2689', current: 'G15', target: 'G16', dept: 'DevOps' },
   { name: 'Tamoor Ahmad',             code: '2166', current: 'G17', target: 'G18', dept: 'DevOps' },
+  { name: 'Tariq Mahmood',             code: '1363', current: 'G18', target: 'G19', dept: 'Engineering' },
   { name: 'Wajahat Razi Malik',       code: '2999', current: 'G14', target: 'G15', dept: 'DevOps' },
   { name: 'Zain ul Abdeen',           code: '1392', current: 'G16', target: 'G17', dept: 'DevOps' },
   { name: 'Zerq Jehan Ahmed',         code: '3135', current: 'G15', target: 'G16', dept: 'DevOps' },
@@ -861,15 +862,27 @@ async function main() {
   console.log('\n🔐 Users...');
   const password = await bcryptjs.hash('password123', 12);
   const users = [
-    { username: 'admin',     role: 'ADMIN',    empCode: '1139', label: 'Muhammad Adeel Arshad G18' },
-    { username: 'manager',   role: 'MANAGER',  empCode: '2166', label: 'Tamoor Ahmad G17' },
-    { username: 'engineer1', role: 'ENGINEER', empCode: '2754', label: 'Farhan Hameed G15' },
-    { username: 'engineer2', role: 'ENGINEER', empCode: '2734', label: 'Muhammad Bilal G14' },
+    { username: '1363', role: 'ADMIN',    empCode: '1363', label: 'Tariq Mahmood G18' },
+    { username: '1139', role: 'TOP_MANAGEMENT', empCode: '1139', label: 'Muhammad Adeel Arshad G18' },
+    { username: '2166', role: 'MANAGER',  empCode: '2166', label: 'Tamoor Ahmad G17' },
+    { username: '1818', role: 'LINE_MANAGER', empCode: '1818', label: 'Abu Bakar Riaz G17' },
+    { username: '2754', role: 'ENGINEER', empCode: '2754', label: 'Farhan Hameed G15' },
+    { username: '2734', role: 'ENGINEER', empCode: '2734', label: 'Muhammad Bilal G14' },
   ] as const;
 
   for (const u of users) {
     const empId = employeeMap[u.empCode];
     if (!empId) { console.warn(`  ⚠️  Employee not found for ${u.username}`); continue; }
+    const role = await prisma.accessRole.upsert({
+      where: { code: u.role },
+      update: { is_active: true },
+      create: {
+        code: u.role,
+        name: u.role.split('_').map((part) => part.charAt(0) + part.slice(1).toLowerCase()).join(' '),
+        is_system: true,
+        is_active: true,
+      },
+    });
     const existingEmployeeUser = await prisma.user.findUnique({ where: { employee_id: empId } });
     if (existingEmployeeUser && existingEmployeeUser.username !== u.username) {
       const existingUsernameUser = await prisma.user.findUnique({ where: { username: u.username } });
@@ -882,6 +895,7 @@ async function main() {
           username: u.username,
           password_hash: password,
           role: u.role,
+          role_id: role.id,
           is_active: true,
         },
       });
@@ -891,8 +905,8 @@ async function main() {
 
     await prisma.user.upsert({
       where:  { username: u.username },
-      update: { password_hash: password, role: u.role, employee_id: empId, is_active: true },
-      create: { username: u.username, password_hash: password, role: u.role, employee_id: empId, is_active: true },
+      update: { password_hash: password, role: u.role, role_id: role.id, employee_id: empId, is_active: true },
+      create: { username: u.username, password_hash: password, role: u.role, role_id: role.id, employee_id: empId, is_active: true },
     });
     console.log(`  ✅ ${u.username} (${u.label})`);
   }

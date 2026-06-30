@@ -2,9 +2,12 @@ import { createApp } from './app';
 import { prisma } from './config/database';
 import env from './config/env';
 import logger from './config/logger';
+import { configService } from './modules/config/config.service';
 
 async function main() {
   try {
+    await configService.ensurePermissions();
+
     // Create Express app
     const app = createApp();
 

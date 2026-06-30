@@ -16,7 +16,14 @@ export const authService = {
     // Find user
     const user = await prisma.user.findUnique({
       where: { username },
-      include: { employee: true },
+      include: {
+        employee: {
+          include: {
+            current_grade: true,
+            target_grade: true,
+          },
+        },
+      },
     });
 
     if (!user) {
@@ -101,10 +108,16 @@ export const authService = {
       refreshToken,
       user: {
         id: updatedUser.id,
+        employeeId: updatedUser.employee_id,
         empCode: user.employee.emp_code,
         username: updatedUser.username,
         role: updatedUser.role,
         employeeName: user.employee.full_name,
+        department: user.employee.department,
+        currentGrade: user.employee.current_grade.code,
+        currentGradeTitle: user.employee.current_grade.title,
+        targetGrade: user.employee.target_grade.code,
+        targetGradeTitle: user.employee.target_grade.title,
       },
     };
   },
