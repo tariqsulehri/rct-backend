@@ -6,6 +6,7 @@ import {
   ApproveSkillAssessmentRequest,
   SkillAssessmentResponse,
   TeamMemberResponse,
+  PendingApprovalResponse,
 } from './assessment.schema';
 import {
   computeAssessmentScore,
@@ -74,6 +75,39 @@ async function getScoredAssessmentStatuses(): Promise<string[]> {
   }
 }
 
+async function getConfiguredStatusCode(
+  preferredCode: string,
+  where: { counts_toward_score?: boolean; is_terminal?: boolean },
+  fallbackCode: string,
+): Promise<string> {
+  try {
+    const preferred = await db.assessmentStatusConfig.findUnique({
+      where: { code: preferredCode },
+      select: { code: true, is_active: true },
+    });
+    if (preferred?.is_active) return preferred.code;
+
+    const configured = await db.assessmentStatusConfig.findFirst({
+      where: { is_active: true, ...where },
+      orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
+      select: { code: true },
+    });
+    return configured?.code ?? fallbackCode;
+  } catch {
+    return fallbackCode;
+  }
+}
+
+async function getInitialAssessmentStatus(isEngineer: boolean): Promise<string> {
+  return isEngineer
+    ? getConfiguredStatusCode('pending', { counts_toward_score: false, is_terminal: false }, 'pending')
+    : getConfiguredStatusCode('approved', { counts_toward_score: true, is_terminal: true }, 'approved');
+}
+
+async function getApprovalStatus(): Promise<string> {
+  return getConfiguredStatusCode('approved', { counts_toward_score: true, is_terminal: true }, 'approved');
+}
+
 async function getAssessmentReferenceIds(
   technologyId: number,
 ): Promise<{ competencyId: number | null; domainId: number | null }> {
@@ -99,11 +133,17 @@ async function getAssessmentReferenceIds(
 async function recomputeScoresForEmployee(employeeId: number): Promise<void> {
   try {
     // Fetch configured type values once for all competencies.
-    const [scoringValues, levelWeights, projectCredits] = await Promise.all([
+    const [scoringValues, levelWeights, projectCredits, scoredStatuses, employee] = await Promise.all([
       getConfiguredScoringValues(),
       getConfiguredLevelWeights(),
       getConfiguredProjectCredits(),
+      getScoredAssessmentStatuses(),
+      db.employee.findUnique({
+        where: { id: employeeId },
+        select: { department_id: true },
+      }),
     ]);
+    const departmentId = employee?.department_id ?? null;
 
     // 1. Find every competency that has at least one technology assessed
     const assessed = await db.skillAssessment.findMany({
@@ -123,7 +163,7 @@ async function recomputeScoresForEmployee(employeeId: number): Promise<void> {
     ];
 
     for (const competencyId of allCompetencyIds) {
-      await recomputeOneCompetency(employeeId, competencyId, scoringValues, levelWeights, projectCredits);
+      await recomputeOneCompetency(employeeId, competencyId, departmentId, scoredStatuses, scoringValues, levelWeights, projectCredits);
     }
   } catch (err) {
     logger.error({ err, employeeId }, 'recomputeScoresForEmployee failed');
@@ -133,16 +173,12 @@ async function recomputeScoresForEmployee(employeeId: number): Promise<void> {
 async function recomputeOneCompetency(
   employeeId: number,
   competencyId: number,
+  departmentId: number | null,
+  scoredStatuses: string[],
   scoringValues: ScoringValues = DEFAULT_SCORING_VALUES,
   levelWeights: LevelWeights = LEVEL_WEIGHT,
   projectCredits: ProjectCredits = {},
 ): Promise<void> {
-  const employee = await db.employee.findUnique({
-    where: { id: employeeId },
-    select: { department_id: true },
-  });
-  const departmentId = employee?.department_id ?? null;
-
   // All technologies for this competency
   const technologies = await db.technology.findMany({
     where: { competency_id: competencyId },
@@ -150,8 +186,6 @@ async function recomputeOneCompetency(
   });
 
   const techIds = technologies.map((t) => t.id);
-
-  const scoredStatuses = await getScoredAssessmentStatuses();
 
   // Only approved assessments count toward the score
   const assessments = await db.skillAssessment.findMany({
@@ -211,7 +245,7 @@ export const assessmentService = {
       const empInternalId = employee.id;
 
       const isEngineer = role === 'ENGINEER';
-      const status = isEngineer ? 'pending' : 'approved';
+      const status = await getInitialAssessmentStatus(isEngineer);
 
       const [scoringValues, levelWeights, projectCredits] = await Promise.all([
         getConfiguredScoringValues(),
@@ -389,7 +423,7 @@ export const assessmentService = {
           department_id: current.employee.department_id,
           domain_id: refs.domainId,
           competency_id: refs.competencyId,
-          status: 'approved',
+          status: await getApprovalStatus(),
           assessed_by: approvedByEmployeeId,
           type: newType,
           level: newLevel,
@@ -458,6 +492,89 @@ export const assessmentService = {
       }));
     } catch (error) {
       logger.error({ error, empCode }, 'Failed to fetch employee assessments');
+      throw error;
+    }
+  },
+
+  async getPendingApprovals(employeeIds: number[]): Promise<PendingApprovalResponse[]> {
+    try {
+      if (employeeIds.length === 0) return [];
+
+      const pendingStatus = await getConfiguredStatusCode(
+        'pending',
+        { counts_toward_score: false, is_terminal: false },
+        'pending',
+      );
+
+      const assessments = await db.skillAssessment.findMany({
+        where: {
+          employee_id: { in: employeeIds },
+          status: pendingStatus,
+          employee: { deleted_at: null },
+        },
+        include: {
+          employee: {
+            select: {
+              emp_code: true,
+              full_name: true,
+              department: true,
+              current_grade: { select: { code: true } },
+              target_grade: { select: { code: true } },
+            },
+          },
+          technology: {
+            select: {
+              name: true,
+              competency: {
+                select: {
+                  name: true,
+                  competency_domains: {
+                    include: { domain: { select: { name: true } } },
+                  },
+                },
+              },
+            },
+          },
+          domain: { select: { name: true } },
+        },
+        orderBy: [{ updated_at: 'asc' }, { id: 'asc' }],
+      });
+
+      const assessorIds = [...new Set(assessments.map((assessment) => assessment.assessed_by))];
+      const assessors = await db.employee.findMany({
+        where: { id: { in: assessorIds } },
+        select: { id: true, emp_code: true, full_name: true },
+      });
+      const assessorMap = new Map(assessors.map((employee) => [employee.id, employee]));
+
+      return assessments.map((assessment) => {
+        const assessor = assessorMap.get(assessment.assessed_by);
+        const primaryDomain = assessment.technology.competency.competency_domains.find((map) => map.is_primary);
+        const fallbackDomain = assessment.technology.competency.competency_domains[0];
+
+        return {
+          id: assessment.id,
+          employee_id: assessment.employee.emp_code,
+          employee_name: assessment.employee.full_name,
+          department: assessment.employee.department,
+          current_grade: assessment.employee.current_grade.code,
+          target_grade: assessment.employee.target_grade.code,
+          technology_id: assessment.technology_id,
+          technology_name: assessment.technology.name,
+          competency_name: assessment.technology.competency.name,
+          domain_name: assessment.domain?.name ?? primaryDomain?.domain.name ?? fallbackDomain?.domain.name ?? 'Unknown',
+          type: assessment.type,
+          projects: assessment.projects,
+          level: assessment.level,
+          score: Number(assessment.score),
+          status: assessment.status,
+          submitted_by: assessor ? `${assessor.full_name} (${assessor.emp_code})` : String(assessment.assessed_by),
+          submitted_at: assessment.assessed_at.toISOString(),
+          updated_at: assessment.updated_at.toISOString(),
+        };
+      });
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch pending approvals');
       throw error;
     }
   },

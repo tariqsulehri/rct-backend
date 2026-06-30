@@ -25,10 +25,17 @@ router.post(
   assessmentController.createAssessment,
 );
 
-// Approve a pending skill assessment (set status=approved + optional level) — MANAGER/ADMIN only
+// Pending approval queue for managers and leaders
+router.get(
+  '/pending-approvals',
+  requireRole('MANAGER', 'LINE_MANAGER', 'TOP_MANAGEMENT', 'ADMIN'),
+  assessmentController.getPendingApprovals,
+);
+
+// Approve a pending skill assessment (set status=approved + optional level) — manager/leader/admin only
 router.patch(
   '/skill-assessments/:id/approve',
-  requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN'),
+  requireRole('MANAGER', 'LINE_MANAGER', 'TOP_MANAGEMENT', 'ADMIN'),
   validate(approveSkillAssessmentSchema),
   assessmentController.approveAssessment,
 );

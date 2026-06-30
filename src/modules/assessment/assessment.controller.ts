@@ -109,6 +109,17 @@ export const assessmentController = {
     }
   },
 
+  async getPendingApprovals(req: Request, res: Response, next: NextFunction) {
+    try {
+      const accessibleEmployeeIds = await accessScopeService.getAccessibleEmployeeIds(req.user!, { forAssessment: true });
+      const result = await assessmentService.getPendingApprovals(accessibleEmployeeIds);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Get pending approvals error');
+      next(error);
+    }
+  },
+
   async getEmployeeAssessments(req: Request, res: Response, next: NextFunction) {
     try {
       const employee = await db.employee.findUnique({

@@ -82,7 +82,56 @@ export const accessScopeService = {
   },
 
   async canAccessEmployee(user: AuthUser, employeeId: number, options: { forAssessment?: boolean } = {}): Promise<boolean> {
-    const accessibleIds = await this.getAccessibleEmployeeIds(user, options);
-    return accessibleIds.includes(employeeId);
+    if (user.role === 'ADMIN') {
+      const count = await db.employee.count({
+        where: { id: employeeId, deleted_at: null },
+      });
+      return count > 0;
+    }
+
+    if (user.employeeId === employeeId) return true;
+
+    const now = new Date();
+
+    const departmentAssignment = await db.userDepartmentAssignment.findFirst({
+      where: {
+        user_id: user.id,
+        can_view: true,
+        ...(options.forAssessment ? { can_manage: true } : {}),
+        ...activeAssignmentWhere(now),
+        department: {
+          employees: {
+            some: { id: employeeId, deleted_at: null },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    if (departmentAssignment) return true;
+
+    const lineAssignment = await db.employeeLineManagerAssignment.findFirst({
+      where: {
+        manager_user_id: user.id,
+        employee_id: employeeId,
+        can_view: true,
+        ...(options.forAssessment ? { can_assess: true } : {}),
+        ...activeAssignmentWhere(now),
+      },
+      select: { id: true },
+    });
+    if (lineAssignment) return true;
+
+    if (user.role === 'MANAGER' || user.role === 'LINE_MANAGER' || user.role === 'TOP_MANAGEMENT') {
+      const legacyReportCount = await db.employee.count({
+        where: {
+          id: employeeId,
+          manager_id: user.employeeId,
+          deleted_at: null,
+        },
+      });
+      return legacyReportCount > 0;
+    }
+
+    return false;
   },
 };

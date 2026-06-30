@@ -40,17 +40,20 @@ export const authService = {
     const isPasswordValid = await bcryptjs.compare(password, user.password_hash);
 
     if (!isPasswordValid) {
-      // Increment failed login attempts
-      const newAttempts = user.login_attempts + 1;
+      const failedUser = await prisma.user.update({
+        where: { id: user.id },
+        data: { login_attempts: { increment: 1 } },
+        select: { login_attempts: true },
+      });
+      const newAttempts = failedUser.login_attempts;
       const lockedUntil = newAttempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
 
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          login_attempts: newAttempts,
-          locked_until: lockedUntil,
-        },
-      });
+      if (lockedUntil) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { locked_until: lockedUntil },
+        });
+      }
 
       throw {
         statusCode: 401,

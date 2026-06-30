@@ -61,3 +61,24 @@ export interface TeamMemberResponse {
   };
   skill_assessments_count: number;
 }
+
+export interface PendingApprovalResponse {
+  id: number;
+  employee_id: string;
+  employee_name: string;
+  department: string;
+  current_grade: string;
+  target_grade: string;
+  technology_id: number;
+  technology_name: string;
+  competency_name: string;
+  domain_name: string;
+  type: string;
+  projects: number;
+  level: string;
+  score: number;
+  status: string;
+  submitted_by: string;
+  submitted_at: string;
+  updated_at: string;
+}

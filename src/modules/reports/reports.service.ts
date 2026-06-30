@@ -42,8 +42,23 @@ async function getStoredCompScores(
 }
 
 async function loadDomainWeights(gradeIds: number[]): Promise<Map<number, Map<string, number>>> {
-  void gradeIds;
-  return new Map();
+  if (gradeIds.length === 0) return new Map();
+
+  const rows = await db.skillDomainGradeWeight.findMany({
+    where: { grade_id: { in: gradeIds } },
+    select: {
+      grade_id: true,
+      weight: true,
+      domain: { select: { name: true } },
+    },
+  });
+
+  const result = new Map<number, Map<string, number>>();
+  for (const row of rows) {
+    if (!result.has(row.grade_id)) result.set(row.grade_id, new Map());
+    result.get(row.grade_id)!.set(row.domain.name, row.weight);
+  }
+  return result;
 }
 
 async function loadGradeThresholds(
