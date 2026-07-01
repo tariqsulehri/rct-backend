@@ -8,6 +8,7 @@ import {
   UpdateDepartmentAssignmentInput,
   CreateLineManagerAssignmentInput,
   UpdateLineManagerAssignmentInput,
+  SyncLineManagerAssignmentsInput,
   CreateEmployeeInput,
   UpdateEmployeeInput,
   CreateGradeInput,
@@ -182,11 +183,24 @@ async function validateEmployeeGradesForDepartment(
 export const configService = {
   // ── Roles ─────────────────────────────────────────────────────────────────
   async ensureRoles() {
-    await Promise.all(DEFAULT_ROLES.map((role) =>
+    const roles = await Promise.all(DEFAULT_ROLES.map((role) =>
       db.accessRole.upsert({
         where: { code: role.code },
         create: { ...role, is_system: true, is_active: true },
         update: { name: role.name, description: role.description, sort_order: role.sort_order, is_active: true },
+      })
+    ));
+
+    await Promise.all(roles.map((role) =>
+      db.user.updateMany({
+        where: {
+          role: role.code,
+          OR: [
+            { role_id: null },
+            { role_id: { not: role.id } },
+          ],
+        },
+        data: { role_id: role.id },
       })
     ));
   },
@@ -206,6 +220,9 @@ export const configService = {
         },
       })
     ));
+
+    const existingRolePermissionCount = await db.rolePermission.count();
+    if (existingRolePermissionCount > 0) return;
 
     for (const [roleCode, permissionCodes] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
       const role = await db.accessRole.findUnique({ where: { code: roleCode as RoleCode } });
@@ -246,16 +263,17 @@ export const configService = {
 
   async updateRolePermissions(roleId: number, data: UpdateRolePermissionsInput, actorUserId?: number) {
     await this.ensurePermissions();
+    const permissionIds = [...new Set(data.permission_ids)];
     const before = await db.accessRole.findUnique({
       where: { id: roleId },
       include: { role_permissions: { include: { permission: true } } },
     });
 
     const permissions = await db.permission.findMany({
-      where: { id: { in: data.permission_ids }, is_active: true },
+      where: { id: { in: permissionIds }, is_active: true },
       select: { id: true },
     });
-    if (permissions.length !== data.permission_ids.length) {
+    if (permissions.length !== permissionIds.length) {
       throw Object.assign(new Error('One or more selected permissions are inactive or do not exist.'), {
         statusCode: 400,
         code: 'INVALID_PERMISSION_SELECTION',
@@ -296,13 +314,60 @@ export const configService = {
   },
 
   async updateRole(id: number, data: UpdateRoleInput, actorUserId?: number) {
-    const before = await db.accessRole.findUnique({ where: { id } });
-    const updated = await db.accessRole.update({ where: { id }, data });
+    const { permission_ids, ...roleData } = data;
+    const before = await db.accessRole.findUnique({
+      where: { id },
+      include: { role_permissions: { include: { permission: true } } },
+    });
+    if (!before) {
+      throw Object.assign(new Error('Role not found.'), {
+        statusCode: 404,
+        code: 'ROLE_NOT_FOUND',
+      });
+    }
+
+    let permissions: Array<{ id: number }> | undefined;
+    if (permission_ids !== undefined) {
+      const permissionIds = [...new Set(permission_ids)];
+      permissions = await db.permission.findMany({
+        where: { id: { in: permissionIds }, is_active: true },
+        select: { id: true },
+      });
+      if (permissions.length !== permissionIds.length) {
+        throw Object.assign(new Error('One or more selected permissions are inactive or do not exist.'), {
+          statusCode: 400,
+          code: 'INVALID_PERMISSION_SELECTION',
+        });
+      }
+    }
+
+    const updated = await db.$transaction(async (tx) => {
+      await tx.accessRole.update({ where: { id }, data: roleData });
+      if (permissions !== undefined) {
+        await tx.rolePermission.deleteMany({ where: { role_id: id } });
+        if (permissions.length > 0) {
+          await tx.rolePermission.createMany({
+            data: permissions.map((permission) => ({ role_id: id, permission_id: permission.id })),
+            skipDuplicates: true,
+          });
+        }
+      }
+      return tx.accessRole.findUniqueOrThrow({
+        where: { id },
+        include: {
+          role_permissions: {
+            include: { permission: true },
+            orderBy: { permission: { sort_order: 'asc' } },
+          },
+        },
+      });
+    });
+
     await this.createAccessAuditLog({
       actorUserId,
       targetUserId: null,
       roleId: updated.id,
-      action: 'UPDATE_ROLE',
+      action: permission_ids !== undefined ? 'UPDATE_ROLE_AND_PERMISSIONS' : 'UPDATE_ROLE',
       entityType: 'role',
       entityId: updated.id,
       oldValue: before,
@@ -445,10 +510,12 @@ export const configService = {
   },
 
   async createLineManagerAssignment(data: CreateLineManagerAssignmentInput, actorUserId?: number) {
-    await this.assertNotSelfLineManager(data.manager_user_id, data.employee_id);
     if (data.is_active !== false) {
+      await this.assertLineManagerEligibility(data.manager_user_id, data.employee_id, true);
       await this.assertOnlyOneActiveLineManager(data.employee_id, data.relationship_type, data.manager_user_id);
       await this.ensureLineManagerRole(data.manager_user_id);
+    } else {
+      await this.assertLineManagerEligibility(data.manager_user_id, data.employee_id, false);
     }
     const created = await db.employeeLineManagerAssignment.upsert({
       where: {
@@ -477,28 +544,173 @@ export const configService = {
     return created;
   },
 
+  async syncLineManagerAssignments(data: SyncLineManagerAssignmentsInput, actorUserId?: number) {
+    const selectedEmployeeIds = [...new Set(data.employee_ids)];
+    const relationshipType = data.relationship_type;
+    const isActive = data.is_active !== false;
+
+    const manager = await db.user.findUnique({
+      where: { id: data.manager_user_id },
+      include: { employee: true },
+    });
+    if (!manager) {
+      throw Object.assign(new Error('Line manager user was not found.'), {
+        statusCode: 404,
+        code: 'LINE_MANAGER_USER_NOT_FOUND',
+      });
+    }
+    if (isActive && !manager.is_active) {
+      throw Object.assign(new Error('Line manager must have an active user login.'), {
+        statusCode: 400,
+        code: 'LINE_MANAGER_USER_INACTIVE',
+      });
+    }
+    if (selectedEmployeeIds.includes(manager.employee_id)) {
+      throw Object.assign(new Error('A user cannot be assigned as line manager for their own employee record.'), {
+        statusCode: 400,
+        code: 'SELF_LINE_MANAGER_NOT_ALLOWED',
+      });
+    }
+
+    const employees = await db.employee.findMany({
+      where: { id: { in: selectedEmployeeIds } },
+      select: { id: true, emp_code: true, full_name: true },
+    });
+    if (employees.length !== selectedEmployeeIds.length) {
+      throw Object.assign(new Error('One or more selected employees do not exist.'), {
+        statusCode: 400,
+        code: 'INVALID_LINE_MANAGER_EMPLOYEE_SELECTION',
+      });
+    }
+
+    if (isActive && selectedEmployeeIds.length > 0) {
+      const conflict = await db.employeeLineManagerAssignment.findFirst({
+        where: {
+          employee_id: { in: selectedEmployeeIds },
+          relationship_type: relationshipType,
+          is_active: true,
+          manager_user_id: { not: data.manager_user_id },
+        },
+        include: {
+          manager_user: { include: { employee: true } },
+          employee: true,
+        },
+      });
+      if (conflict) {
+        const employeeLabel = `${conflict.employee.emp_code} - ${conflict.employee.full_name}`;
+        const managerLabel = conflict.manager_user.employee
+          ? `${conflict.manager_user.employee.emp_code} - ${conflict.manager_user.employee.full_name}`
+          : conflict.manager_user.username;
+        throw Object.assign(new Error(`${employeeLabel} is already actively assigned to line manager ${managerLabel}. Deactivate that assignment before reassigning.`), {
+          statusCode: 409,
+          code: 'EMPLOYEE_ALREADY_HAS_ACTIVE_LINE_MANAGER',
+        });
+      }
+      await this.ensureLineManagerRole(data.manager_user_id);
+    }
+
+    const assignmentData = {
+      can_view: data.can_view,
+      can_assess: data.can_assess,
+      ...(data.starts_at !== undefined ? { starts_at: data.starts_at } : {}),
+      ...(data.ends_at !== undefined ? { ends_at: data.ends_at } : {}),
+      is_primary: data.is_primary,
+      is_active: data.is_active,
+      created_by: actorUserId,
+    };
+
+    await db.$transaction(async (tx) => {
+      await tx.employeeLineManagerAssignment.updateMany({
+        where: {
+          manager_user_id: data.manager_user_id,
+          relationship_type: relationshipType,
+          is_active: true,
+          ...(selectedEmployeeIds.length > 0 ? { employee_id: { notIn: selectedEmployeeIds } } : {}),
+        },
+        data: { is_active: false, ends_at: new Date() },
+      });
+
+      for (const employeeId of selectedEmployeeIds) {
+        await tx.employeeLineManagerAssignment.upsert({
+          where: {
+            manager_user_id_employee_id_relationship_type: {
+              manager_user_id: data.manager_user_id,
+              employee_id: employeeId,
+              relationship_type: relationshipType,
+            },
+          },
+          create: {
+            manager_user_id: data.manager_user_id,
+            employee_id: employeeId,
+            relationship_type: relationshipType,
+            ...assignmentData,
+          },
+          update: assignmentData,
+        });
+      }
+    });
+
+    await this.createAccessAuditLog({
+      actorUserId,
+      targetUserId: data.manager_user_id,
+      action: 'SYNC_LINE_MANAGER_ASSIGNMENTS',
+      entityType: 'employee_line_manager_assignment',
+      entityId: null,
+      newValue: {
+        manager_user_id: data.manager_user_id,
+        relationship_type: relationshipType,
+        selected_employee_ids: selectedEmployeeIds,
+        selected_count: selectedEmployeeIds.length,
+      },
+    });
+
+    return this.listLineManagerAssignments();
+  },
+
   async updateLineManagerAssignment(id: number, data: UpdateLineManagerAssignmentInput, actorUserId?: number) {
     const before = await db.employeeLineManagerAssignment.findUnique({ where: { id } });
     if (before) {
+      if (
+        (data.manager_user_id !== undefined && data.manager_user_id !== before.manager_user_id) ||
+        (data.employee_id !== undefined && data.employee_id !== before.employee_id) ||
+        (data.relationship_type !== undefined && data.relationship_type !== before.relationship_type)
+      ) {
+        throw Object.assign(new Error('Assignment identity cannot be changed. Deactivate this row before assigning the employee resource to another line manager.'), {
+          statusCode: 400,
+          code: 'LINE_MANAGER_ASSIGNMENT_IDENTITY_IMMUTABLE',
+        });
+      }
       const managerUserId = data.manager_user_id ?? before.manager_user_id;
       const employeeId = data.employee_id ?? before.employee_id;
       const relationshipType = data.relationship_type ?? before.relationship_type;
       const isActive = data.is_active ?? before.is_active;
-      await this.assertNotSelfLineManager(managerUserId, employeeId);
+      await this.assertLineManagerAssignmentDoesNotExist(managerUserId, employeeId, relationshipType, id);
+      await this.assertLineManagerEligibility(managerUserId, employeeId, isActive);
       if (isActive) {
         await this.assertOnlyOneActiveLineManager(employeeId, relationshipType, managerUserId, id);
         await this.ensureLineManagerRole(managerUserId);
       }
     }
-    const updated = await db.employeeLineManagerAssignment.update({
-      where: { id },
-      data,
-      include: {
-        manager_user: { include: { employee: true, role_ref: true } },
-        employee: { include: { dept: true, current_grade: true, target_grade: true } },
-        creator: { include: { employee: true } },
-      },
-    });
+    let updated;
+    try {
+      updated = await db.employeeLineManagerAssignment.update({
+        where: { id },
+        data,
+        include: {
+          manager_user: { include: { employee: true, role_ref: true } },
+          employee: { include: { dept: true, current_grade: true, target_grade: true } },
+          creator: { include: { employee: true } },
+        },
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2002') {
+        throw Object.assign(new Error('This line-manager assignment already exists. Refresh the list and edit the existing row.'), {
+          statusCode: 409,
+          code: 'LINE_MANAGER_ASSIGNMENT_ALREADY_EXISTS',
+        });
+      }
+      throw error;
+    }
     await this.createAccessAuditLog({
       actorUserId,
       targetUserId: updated.manager_user_id,
@@ -509,6 +721,31 @@ export const configService = {
       newValue: updated,
     });
     return updated;
+  },
+
+  async assertLineManagerAssignmentDoesNotExist(managerUserId: number, employeeId: number, relationshipType: string, ignoreAssignmentId?: number) {
+    const existing = await db.employeeLineManagerAssignment.findFirst({
+      where: {
+        manager_user_id: managerUserId,
+        employee_id: employeeId,
+        relationship_type: relationshipType,
+        ...(ignoreAssignmentId ? { id: { not: ignoreAssignmentId } } : {}),
+      },
+      include: {
+        manager_user: { include: { employee: true } },
+        employee: true,
+      },
+    });
+    if (!existing) return;
+
+    const employeeLabel = `${existing.employee.emp_code} - ${existing.employee.full_name}`;
+    const managerLabel = existing.manager_user.employee
+      ? `${existing.manager_user.employee.emp_code} - ${existing.manager_user.employee.full_name}`
+      : existing.manager_user.username;
+    throw Object.assign(new Error(`${employeeLabel} already has a ${relationshipType} assignment for ${managerLabel}. Edit that existing row instead of creating a duplicate.`), {
+      statusCode: 409,
+      code: 'LINE_MANAGER_ASSIGNMENT_ALREADY_EXISTS',
+    });
   },
 
   async deleteLineManagerAssignment(id: number, actorUserId?: number) {
@@ -534,11 +771,23 @@ export const configService = {
     return updated;
   },
 
-  async assertNotSelfLineManager(managerUserId: number, employeeId: number) {
+  async assertLineManagerEligibility(managerUserId: number, employeeId: number, requireActiveUser: boolean) {
     const manager = await db.user.findUnique({
       where: { id: managerUserId },
-      select: { employee_id: true },
+      select: { employee_id: true, is_active: true },
     });
+    if (!manager) {
+      throw Object.assign(new Error('Line manager user was not found.'), {
+        statusCode: 404,
+        code: 'LINE_MANAGER_USER_NOT_FOUND',
+      });
+    }
+    if (requireActiveUser && !manager.is_active) {
+      throw Object.assign(new Error('Line manager must have an active user login.'), {
+        statusCode: 400,
+        code: 'LINE_MANAGER_USER_INACTIVE',
+      });
+    }
     if (manager?.employee_id === employeeId) {
       throw Object.assign(new Error('A user cannot be assigned as line manager for their own employee record.'), {
         statusCode: 400,
@@ -755,15 +1004,18 @@ export const configService = {
   },
 
   async createCompetencyCategory(data: CreateCompetencyCategoryInput) {
-    return db.competencyCategory.create({ data });
+    await db.competencyCategory.create({ data });
+    return this.listCompetencyCategories();
   },
 
   async updateCompetencyCategory(id: number, data: UpdateCompetencyCategoryInput) {
-    return db.competencyCategory.update({ where: { id }, data });
+    await db.competencyCategory.update({ where: { id }, data });
+    return this.listCompetencyCategories();
   },
 
   async deleteCompetencyCategory(id: number) {
-    return db.competencyCategory.delete({ where: { id } });
+    await db.competencyCategory.delete({ where: { id } });
+    return this.listCompetencyCategories();
   },
 
   // ── Departments ────────────────────────────────────────────────────────────

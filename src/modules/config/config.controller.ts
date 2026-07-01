@@ -105,6 +105,16 @@ export const configController = {
     }
   },
 
+  async syncLineManagerAssignments(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.syncLineManagerAssignments(req.body, req.user?.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Sync line manager assignments error');
+      next(error);
+    }
+  },
+
   async updateLineManagerAssignment(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await configService.updateLineManagerAssignment(parseInt(req.params.id), req.body, req.user?.id);
@@ -280,8 +290,8 @@ export const configController = {
   },
   async deleteCompetencyCategory(req: Request, res: Response, next: NextFunction) {
     try {
-      await configService.deleteCompetencyCategory(parseInt(req.params.id));
-      res.json({ success: true });
+      const result = await configService.deleteCompetencyCategory(parseInt(req.params.id));
+      res.json({ success: true, data: result });
     } catch (error) { logger.error({ error }, 'Delete category error'); next(error); }
   },
 

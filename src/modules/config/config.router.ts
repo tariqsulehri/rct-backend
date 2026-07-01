@@ -34,6 +34,7 @@ import {
   updateDepartmentAssignmentSchema,
   createLineManagerAssignmentSchema,
   updateLineManagerAssignmentSchema,
+  syncLineManagerAssignmentsSchema,
   updateRolePermissionsSchema,
 } from './config.schema';
 
@@ -56,6 +57,7 @@ router.delete('/access/department-assignments/:id', requirePermission('assignmen
 
 router.get('/access/line-manager-assignments', requirePermission('assignments.manage'), configController.listLineManagerAssignments);
 router.post('/access/line-manager-assignments', requirePermission('assignments.manage'), validate(createLineManagerAssignmentSchema), configController.createLineManagerAssignment);
+router.post('/access/line-manager-assignments/sync', requirePermission('assignments.manage'), validate(syncLineManagerAssignmentsSchema), configController.syncLineManagerAssignments);
 router.patch('/access/line-manager-assignments/:id', requirePermission('assignments.manage'), validate(updateLineManagerAssignmentSchema), configController.updateLineManagerAssignment);
 router.delete('/access/line-manager-assignments/:id', requirePermission('assignments.manage'), configController.deleteLineManagerAssignment);
 

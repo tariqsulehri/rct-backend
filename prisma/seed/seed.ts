@@ -19,8 +19,8 @@ const GRADES = [
 
 // ─── Competency Categories (skill type: Technical vs Behavioral) ─────────────
 const COMPETENCY_CATEGORIES = [
-  { name: 'Technical',  description: 'Hands-on technical skills and tool proficiency', color: '#3B82F6' },  // blue
-  { name: 'Behavioral', description: 'Soft skills: leadership, communication, mentoring', color: '#8B5CF6' }, // purple
+  { name: 'Technical',  description: 'Hands-on technical skills and tool proficiency', color: '#3B82F6', weight: 1.0, sort_order: 1, is_active: true },  // blue
+  { name: 'Behavioral', description: 'Soft skills: leadership, communication, mentoring', color: '#8B5CF6', weight: 1.0, sort_order: 2, is_active: true }, // purple
 ];
 
 // ─── 12 Skill Domains — each with a color for UI visualization ───────────────
@@ -682,7 +682,7 @@ async function main() {
   for (const cat of COMPETENCY_CATEGORIES) {
     const category = await prisma.competencyCategory.upsert({
       where: { name: cat.name },
-      update: { description: cat.description, color: cat.color },
+      update: { description: cat.description, color: cat.color, weight: cat.weight, sort_order: cat.sort_order, is_active: cat.is_active },
       create: cat,
     });
     categoryMap[cat.name] = category.id;
@@ -690,7 +690,7 @@ async function main() {
   }
 
   // 5. Skill Domains (with colors)
-  console.log('\n🧩 Skill Domains (7 areas)...');
+  console.log(`\n🧩 Skill Domains (${SKILL_DOMAINS.length} areas)...`);
   const domainMap: Record<string, number> = {};
   for (const d of SKILL_DOMAINS) {
     const domain = await prisma.skillDomain.upsert({
@@ -703,7 +703,7 @@ async function main() {
   }
 
   // 6. Competencies + Domain Mappings + Technologies
-  console.log('\n📋 Competencies (21), Domain Mappings, and Technologies...');
+  console.log(`\n📋 Competencies (${COMPETENCIES.length}), Domain Mappings, and Technologies...`);
   const competencyMap: Record<string, number> = {};
   let totalTech = 0;
 

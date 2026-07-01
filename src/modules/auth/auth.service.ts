@@ -10,6 +10,27 @@ import { LoginRequest, LoginResponse } from './auth.schema';
 type LoginResult = LoginResponse & { refreshToken: string };
 type CurrentUserResult = LoginResponse['user'];
 
+const rolePermissionInclude = {
+  role_ref: {
+    include: {
+      role_permissions: {
+        where: { permission: { is_active: true } },
+        include: { permission: true },
+      },
+    },
+  },
+} as const;
+
+function getPermissionCodes(user: {
+  role_ref?: {
+    is_active: boolean;
+    role_permissions: Array<{ permission: { code: string } }>;
+  } | null;
+}) {
+  if (user.role_ref?.is_active !== true) return [];
+  return user.role_ref.role_permissions.map(item => item.permission.code);
+}
+
 export const authService = {
   async getCurrentUser(userId: number): Promise<CurrentUserResult> {
     const user = await prisma.user.findUnique({
@@ -21,6 +42,7 @@ export const authService = {
             target_grade: true,
           },
         },
+        ...rolePermissionInclude,
       },
     });
 
@@ -44,6 +66,7 @@ export const authService = {
       currentGradeTitle: user.employee.current_grade.title,
       targetGrade: user.employee.target_grade.code,
       targetGradeTitle: user.employee.target_grade.title,
+      permissions: getPermissionCodes(user),
     };
   },
 
@@ -60,6 +83,7 @@ export const authService = {
             target_grade: true,
           },
         },
+        ...rolePermissionInclude,
       },
     });
 
@@ -163,6 +187,7 @@ export const authService = {
         currentGradeTitle: user.employee.current_grade.title,
         targetGrade: user.employee.target_grade.code,
         targetGradeTitle: user.employee.target_grade.title,
+        permissions: getPermissionCodes(user),
       },
     };
   },

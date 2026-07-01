@@ -21,6 +21,7 @@ export const loginResponseSchema = z.object({
     currentGradeTitle: z.string(),
     targetGrade: z.string(),
     targetGradeTitle: z.string(),
+    permissions: z.array(z.string()),
   }),
 });
 

@@ -22,6 +22,7 @@ export const updateRoleSchema = z.object({
   description: z.string().nullable().optional(),
   is_active: z.boolean().optional(),
   sort_order: z.number().int().min(0).optional(),
+  permission_ids: z.array(z.number().int().positive()).optional(),
 });
 
 export const updateRolePermissionsSchema = z.object({
@@ -56,6 +57,18 @@ export const createLineManagerAssignmentSchema = z.object({
 });
 
 export const updateLineManagerAssignmentSchema = createLineManagerAssignmentSchema.partial();
+
+export const syncLineManagerAssignmentsSchema = z.object({
+  manager_user_id: z.number().int().positive(),
+  employee_ids: z.array(z.number().int().positive()).default([]),
+  relationship_type: z.string().min(1).max(50).default('LINE_MANAGER'),
+  can_view: z.boolean().default(true),
+  can_assess: z.boolean().default(true),
+  starts_at: z.coerce.date().optional(),
+  ends_at: nullableDateInput,
+  is_primary: z.boolean().default(false),
+  is_active: z.boolean().default(true),
+});
 
 export const createEmployeeSchema = z.object({
   emp_code: z.string().min(1).max(20),
@@ -110,6 +123,7 @@ export type CreateDepartmentAssignmentInput = z.infer<typeof createDepartmentAss
 export type UpdateDepartmentAssignmentInput = z.infer<typeof updateDepartmentAssignmentSchema>;
 export type CreateLineManagerAssignmentInput = z.infer<typeof createLineManagerAssignmentSchema>;
 export type UpdateLineManagerAssignmentInput = z.infer<typeof updateLineManagerAssignmentSchema>;
+export type SyncLineManagerAssignmentsInput = z.infer<typeof syncLineManagerAssignmentsSchema>;
 export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>;
 export type UpdateEmployeeInput = z.infer<typeof updateEmployeeSchema>;
 export type CreateGradeInput = z.infer<typeof createGradeSchema>;
