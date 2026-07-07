@@ -583,6 +583,16 @@ export const configController = {
     }
   },
 
+  async syncDepartmentSkillMap(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.syncDepartmentSkillMap(req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Sync department skill map error');
+      next(error);
+    }
+  },
+
   // ── Technologies ───────────────────────────────────────────────────────────
   async listTechnologies(req: Request, res: Response, next: NextFunction) {
     try {

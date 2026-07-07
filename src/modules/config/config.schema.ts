@@ -96,6 +96,7 @@ export const createSkillDomainSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  category_id: z.number().int().positive(),
 });
 export const updateSkillDomainSchema = createSkillDomainSchema.partial();
 
@@ -103,11 +104,21 @@ export const createCompetencySchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().min(1),
   is_critical: z.boolean().optional(),
-  category_id: z.number().int().positive(),
+  category_id: z.number().int().positive().optional(),
   department_id: z.number().int().positive().optional(),
   domain_ids: z.array(z.number().int().positive()).min(1),
 });
 export const updateCompetencySchema = createCompetencySchema.partial();
+
+const departmentSkillMapItemSchema = z.object({
+  competency_id: z.number().int().positive(),
+  domain_ids: z.array(z.number().int().positive()).default([]),
+});
+
+export const syncDepartmentSkillMapSchema = z.object({
+  department_id: z.number().int().positive(),
+  mappings: z.array(departmentSkillMapItemSchema).default([]),
+});
 
 export const createTechnologySchema = z.object({
   name: z.string().min(1).max(100),
@@ -132,6 +143,7 @@ export type CreateSkillDomainInput = z.infer<typeof createSkillDomainSchema>;
 export type UpdateSkillDomainInput = z.infer<typeof updateSkillDomainSchema>;
 export type CreateCompetencyInput = z.infer<typeof createCompetencySchema>;
 export type UpdateCompetencyInput = z.infer<typeof updateCompetencySchema>;
+export type SyncDepartmentSkillMapInput = z.infer<typeof syncDepartmentSkillMapSchema>;
 export type CreateTechnologyInput = z.infer<typeof createTechnologySchema>;
 export type UpdateTechnologyInput = z.infer<typeof updateTechnologySchema>;
 

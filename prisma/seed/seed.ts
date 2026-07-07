@@ -24,19 +24,24 @@ const COMPETENCY_CATEGORIES = [
 ];
 
 // ─── 12 Skill Domains — each with a color for UI visualization ───────────────
-const SKILL_DOMAINS = [
-  { name: 'Core DevOps',          description: 'Deployment, automation, CI/CD, containerisation and orchestration',       color: '#3B82F6' }, // blue
-  { name: 'Cloud',                description: 'Cloud infrastructure, IaC, cloud architecture and multi-cloud strategy',  color: '#06B6D4' }, // cyan
-  { name: 'SysOps',               description: 'System and server administration, configuration management',               color: '#10B981' }, // emerald
-  { name: 'SRE',                  description: 'Observability, incident management, SLOs, reliability, DR',               color: '#F59E0B' }, // amber
-  { name: 'DevSecOps',            description: 'Security controls, compliance, threat modelling and performance tuning',   color: '#EF4444' }, // red
-  { name: 'FinOps',               description: 'Cloud cost optimisation and financial governance',                         color: '#84CC16' }, // lime
-  { name: 'Networking',           description: 'Network design, protocols, cloud networking and security',                 color: '#EC4899' }, // pink
-  { name: 'MLOps',                description: 'Machine learning pipelines, model deployment and monitoring',              color: '#A855F7' }, // purple
-  { name: 'AIOps',                description: 'AI-driven operations, anomaly detection and intelligent automation',       color: '#F97316' }, // orange
-  { name: 'DataOps',              description: 'Data pipeline engineering, data quality and platform operations',          color: '#14B8A6' }, // teal
-  { name: 'AI-Augmented DevOps',  description: 'DevOps practices enhanced with AI/ML tooling and workflows',              color: '#6366F1' }, // indigo
-  { name: 'Platform Engineering', description: 'Internal developer platforms, golden paths and self-service infrastructure', color: '#0EA5E9' }, // sky
+const SKILL_DOMAINS: {
+  name: string;
+  category: 'Technical' | 'Behavioral';
+  description: string;
+  color: string;
+}[] = [
+  { name: 'Core DevOps',          category: 'Technical', description: 'Deployment, automation, CI/CD, containerisation and orchestration',       color: '#3B82F6' }, // blue
+  { name: 'Cloud',                category: 'Technical', description: 'Cloud infrastructure, IaC, cloud architecture and multi-cloud strategy',  color: '#06B6D4' }, // cyan
+  { name: 'SysOps',               category: 'Technical', description: 'System and server administration, configuration management',               color: '#10B981' }, // emerald
+  { name: 'SRE',                  category: 'Technical', description: 'Observability, incident management, SLOs, reliability, DR',               color: '#F59E0B' }, // amber
+  { name: 'DevSecOps',            category: 'Technical', description: 'Security controls, compliance, threat modelling and performance tuning',   color: '#EF4444' }, // red
+  { name: 'FinOps',               category: 'Technical', description: 'Cloud cost optimisation and financial governance',                         color: '#84CC16' }, // lime
+  { name: 'Networking',           category: 'Technical', description: 'Network design, protocols, cloud networking and security',                 color: '#EC4899' }, // pink
+  { name: 'MLOps',                category: 'Technical', description: 'Machine learning pipelines, model deployment and monitoring',              color: '#A855F7' }, // purple
+  { name: 'AIOps',                category: 'Technical', description: 'AI-driven operations, anomaly detection and intelligent automation',       color: '#F97316' }, // orange
+  { name: 'DataOps',              category: 'Technical', description: 'Data pipeline engineering, data quality and platform operations',          color: '#14B8A6' }, // teal
+  { name: 'AI-Augmented DevOps',  category: 'Technical', description: 'DevOps practices enhanced with AI/ML tooling and workflows',              color: '#6366F1' }, // indigo
+  { name: 'Platform Engineering', category: 'Technical', description: 'Internal developer platforms, golden paths and self-service infrastructure', color: '#0EA5E9' }, // sky
 ];
 
 // ─── Domain-Grade weight matrix (right table from career progression sheet) ──
@@ -693,10 +698,12 @@ async function main() {
   console.log(`\n🧩 Skill Domains (${SKILL_DOMAINS.length} areas)...`);
   const domainMap: Record<string, number> = {};
   for (const d of SKILL_DOMAINS) {
+    const categoryId = categoryMap[d.category];
+    if (!categoryId) { console.warn(`  ⚠️  Category not found: ${d.category}`); continue; }
     const domain = await prisma.skillDomain.upsert({
       where: { name: d.name },
-      update: { description: d.description, weight: d.weight, color: d.color },
-      create: d,
+      update: { description: d.description, color: d.color, category_id: categoryId },
+      create: { name: d.name, description: d.description, color: d.color, category_id: categoryId },
     });
     domainMap[d.name] = domain.id;
     console.log(`  ✅ ${d.name} (${d.color})`);

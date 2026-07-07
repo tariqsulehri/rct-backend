@@ -18,6 +18,7 @@ import {
   updateTechnologySchema,
   createDepartmentSchema,
   updateDepartmentSchema,
+  syncDepartmentSkillMapSchema,
   upsertDepartmentConfigSchema,
   bulkUpsertDomainWeightsSchema,
   updateAssessmentTypeConfigSchema,
@@ -126,6 +127,7 @@ router.get('/competencies', requirePermission('config.manage'), configController
 router.post('/competencies', requirePermission('config.manage'), validate(createCompetencySchema), configController.createCompetency);
 router.patch('/competencies/:id', requirePermission('config.manage'), validate(updateCompetencySchema), configController.updateCompetency);
 router.delete('/competencies/:id', requirePermission('config.manage'), configController.deleteCompetency);
+router.put('/department-skill-map', requirePermission('config.manage'), validate(syncDepartmentSkillMapSchema), configController.syncDepartmentSkillMap);
 
 // ── Technologies ──────────────────────────────────────────────────────────────
 // Read is open to all roles so MANAGER and ENGINEER can browse the skill catalog

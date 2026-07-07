@@ -23,7 +23,7 @@ model Grade {
   experience_years Int
   performance_note String?
 
-  department           Department                 @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  department           Department               @relation(fields: [department_id], references: [id], onDelete: Cascade)
   employees_current    Employee[]               @relation("CurrentGrade")
   employees_target     Employee[]               @relation("TargetGrade")
   grade_matrices       GradeMatrix[]
@@ -40,13 +40,16 @@ model SkillDomain {
   name        String  @unique
   description String?
   color       String? // Hex color for UI badges/visualization (e.g. '#3B82F6')
+  category_id Int
 
   domain_scores      DomainScore[]
   department_weights DepartmentDomainWeight[]
   competency_domains CompetencyDomainMap[]
   grade_weights      SkillDomainGradeWeight[]
   skill_assessments  SkillAssessment[]
+  category           CompetencyCategory       @relation(fields: [category_id], references: [id], onDelete: Restrict)
 
+  @@index([category_id])
   @@map("skill_domains")
 }
 
@@ -74,7 +77,8 @@ model CompetencyCategory {
   sort_order  Int     @default(0)
   is_active   Boolean @default(true)
 
-  competencies Competency[]
+  competencies  Competency[]
+  skill_domains SkillDomain[]
 
   @@index([is_active])
   @@index([sort_order])
@@ -214,16 +218,16 @@ model Department {
   description     String?
   created_at      DateTime @default(now())
 
-  organization   Organization             @relation(fields: [organization_id], references: [id], onDelete: Restrict)
-  employees      Employee[]
-  config         DepartmentConfig?
-  grades         Grade[]
-  domain_weights DepartmentDomainWeight[]
-  grade_matrices GradeMatrix[]
+  organization           Organization               @relation(fields: [organization_id], references: [id], onDelete: Restrict)
+  employees              Employee[]
+  config                 DepartmentConfig?
+  grades                 Grade[]
+  domain_weights         DepartmentDomainWeight[]
+  grade_matrices         GradeMatrix[]
   competency_domain_maps CompetencyDomainMap[]
-  skill_assessments SkillAssessment[]
-  competency_scores CompetencyScore[]
-  user_assignments UserDepartmentAssignment[]
+  skill_assessments      SkillAssessment[]
+  competency_scores      CompetencyScore[]
+  user_assignments       UserDepartmentAssignment[]
 
   @@unique([organization_id, name])
   @@index([organization_id])
@@ -322,8 +326,8 @@ model AccessRole {
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 
-  users User[]
-  audit_logs AccessAuditLog[]
+  users            User[]
+  audit_logs       AccessAuditLog[]
   role_permissions RolePermission[]
 
   @@map("roles")
@@ -382,15 +386,15 @@ model User {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  employee       Employee       @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  role_ref       AccessRole?    @relation(fields: [role_id], references: [id], onDelete: SetNull)
-  refresh_tokens RefreshToken[]
-  department_assignments UserDepartmentAssignment[]
-  line_manager_assignments EmployeeLineManagerAssignment[] @relation("LineManagerUser")
-  created_department_assignments UserDepartmentAssignment[] @relation("CreatedDepartmentAssignments")
+  employee                         Employee                        @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  role_ref                         AccessRole?                     @relation(fields: [role_id], references: [id], onDelete: SetNull)
+  refresh_tokens                   RefreshToken[]
+  department_assignments           UserDepartmentAssignment[]
+  line_manager_assignments         EmployeeLineManagerAssignment[] @relation("LineManagerUser")
+  created_department_assignments   UserDepartmentAssignment[]      @relation("CreatedDepartmentAssignments")
   created_line_manager_assignments EmployeeLineManagerAssignment[] @relation("CreatedLineManagerAssignments")
-  access_audit_actions AccessAuditLog[] @relation("AccessAuditActor")
-  access_audit_targets AccessAuditLog[] @relation("AccessAuditTarget")
+  access_audit_actions             AccessAuditLog[]                @relation("AccessAuditActor")
+  access_audit_targets             AccessAuditLog[]                @relation("AccessAuditTarget")
 
   @@index([employee_id])
   @@index([role_id])
@@ -399,18 +403,18 @@ model User {
 }
 
 model UserDepartmentAssignment {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   user_id         Int
   department_id   Int
-  assignment_type String   @default("MANAGER")
-  can_view        Boolean  @default(true)
-  can_manage      Boolean  @default(false)
-  starts_at       DateTime @default(now())
+  assignment_type String    @default("MANAGER")
+  can_view        Boolean   @default(true)
+  can_manage      Boolean   @default(false)
+  starts_at       DateTime  @default(now())
   ends_at         DateTime?
-  is_active       Boolean  @default(true)
+  is_active       Boolean   @default(true)
   created_by      Int?
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
 
   user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
   department Department @relation(fields: [department_id], references: [id], onDelete: Cascade)
@@ -424,19 +428,19 @@ model UserDepartmentAssignment {
 }
 
 model EmployeeLineManagerAssignment {
-  id                Int      @id @default(autoincrement())
+  id                Int       @id @default(autoincrement())
   manager_user_id   Int
   employee_id       Int
-  relationship_type String   @default("LINE_MANAGER")
-  can_view          Boolean  @default(true)
-  can_assess        Boolean  @default(true)
-  starts_at         DateTime @default(now())
+  relationship_type String    @default("LINE_MANAGER")
+  can_view          Boolean   @default(true)
+  can_assess        Boolean   @default(true)
+  starts_at         DateTime  @default(now())
   ends_at           DateTime?
-  is_primary        Boolean  @default(false)
-  is_active         Boolean  @default(true)
+  is_primary        Boolean   @default(false)
+  is_active         Boolean   @default(true)
   created_by        Int?
-  created_at        DateTime @default(now())
-  updated_at        DateTime @updatedAt
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
 
   manager_user User     @relation("LineManagerUser", fields: [manager_user_id], references: [id], onDelete: Cascade)
   employee     Employee @relation(fields: [employee_id], references: [id], onDelete: Cascade)
@@ -517,11 +521,11 @@ model Employee {
   reports       Employee[]   @relation("Reports")
   dept          Department?  @relation(fields: [department_id], references: [id])
 
-  user              User?
+  user                     User?
   line_manager_assignments EmployeeLineManagerAssignment[]
-  skill_assessments SkillAssessment[]
-  competency_scores CompetencyScore[]
-  domain_scores     DomainScore[]
+  skill_assessments        SkillAssessment[]
+  competency_scores        CompetencyScore[]
+  domain_scores            DomainScore[]
 
   @@index([manager_id])
   @@index([organization_id])
@@ -532,7 +536,7 @@ model Employee {
 }
 
 model SkillAssessment {
-  id            Int @id @default(autoincrement())
+  id            Int  @id @default(autoincrement())
   employee_id   Int
   department_id Int?
   domain_id     Int?
@@ -569,7 +573,7 @@ model SkillAssessment {
 // ============================================================================
 
 model CompetencyScore {
-  id            Int @id @default(autoincrement())
+  id            Int  @id @default(autoincrement())
   employee_id   Int
   department_id Int?
   competency_id Int

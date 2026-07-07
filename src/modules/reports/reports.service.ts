@@ -1,15 +1,36 @@
 import { db } from '../../config/database';
 import logger from '../../config/logger';
 import {
+  buildCompetencyGapDetail,
+  buildCompetencyThresholdMap,
+  buildDomainGapSummary,
   buildDomainScores,
   buildThresholdStats,
+  calculateCompetencyGap,
   getPrimaryDomain,
   scoreToPromotionStarRating,
   scoreToSkillSummaryStarRating,
+  summarizeReadiness,
   weightedOverall,
 } from '../../scoring/reporting.engine';
-import { accessScopeService } from '../access/access-scope.service';
 import { RoleCode } from '../../types/rbac';
+import {
+  getAccessibleReportEmployeeIds,
+  getEmployeesForManager,
+  getGradeThresholdMap,
+  getReportDepartmentIds,
+  getReportTargetGradeIds,
+  getStoredCompScores,
+  loadDomainWeights,
+  loadGradeThresholds,
+  loadReportSkillContext,
+} from './report-data.service';
+import {
+  buildGapAnalysisEmployeeSummary,
+  buildOrderedReportCompetencies,
+  buildReportEmployeeSummary,
+  buildReportEmployeeSummaryWithGradeTitles,
+} from './report-row.helpers';
 
 // ── Canonical scoring architecture ───────────────────────────────────────────
 // skill_assessments.score  = formula1(type, projects, scoring values) × levelWeight   (stored per row)
@@ -18,69 +39,6 @@ import { RoleCode } from '../../types/rbac';
 // Domain score  = AVG of scored competencies in that domain
 // Overall score = equal AVG of scored domains for now. Grade readiness is driven
 // by competency_grade_thresholds via the GradeMatrix Prisma model.
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Load stored competency scores for a set of employees.
- * Returns Map<employeeId, Map<competencyId, score>>
- */
-async function getStoredCompScores(
-  employeeIds: number[]
-): Promise<Map<number, Map<number, number>>> {
-  const rows = await db.competencyScore.findMany({
-    where: { employee_id: { in: employeeIds } },
-    select: { employee_id: true, competency_id: true, score: true },
-  });
-  const result = new Map<number, Map<number, number>>();
-  for (const row of rows) {
-    if (row.score == null) continue;
-    if (!result.has(row.employee_id)) result.set(row.employee_id, new Map());
-    result.get(row.employee_id)!.set(row.competency_id, row.score);
-  }
-  return result;
-}
-
-async function loadDomainWeights(gradeIds: number[]): Promise<Map<number, Map<string, number>>> {
-  if (gradeIds.length === 0) return new Map();
-
-  const rows = await db.skillDomainGradeWeight.findMany({
-    where: { grade_id: { in: gradeIds } },
-    select: {
-      grade_id: true,
-      weight: true,
-      domain: { select: { name: true } },
-    },
-  });
-
-  const result = new Map<number, Map<string, number>>();
-  for (const row of rows) {
-    if (!result.has(row.grade_id)) result.set(row.grade_id, new Map());
-    result.get(row.grade_id)!.set(row.domain.name, row.weight);
-  }
-  return result;
-}
-
-async function loadGradeThresholds(
-  departmentIds: number[],
-  gradeIds: number[]
-): Promise<Map<string, Map<number, number>>> {
-  if (departmentIds.length === 0 || gradeIds.length === 0) return new Map();
-  const rows = await db.gradeMatrix.findMany({
-    where: {
-      department_id: { in: departmentIds },
-      grade_id: { in: gradeIds },
-    },
-    select: { department_id: true, grade_id: true, competency_id: true, threshold: true },
-  });
-  const result = new Map<string, Map<number, number>>();
-  for (const row of rows) {
-    const key = `${row.department_id}:${row.grade_id}`;
-    if (!result.has(key)) result.set(key, new Map());
-    result.get(key)!.set(row.competency_id, row.threshold);
-  }
-  return result;
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -106,38 +64,37 @@ export async function gapAnalysis(employeeId: number) {
   });
   if (!employee) throw Object.assign(new Error('Employee not found'), { statusCode: 404 });
 
-  const allCompetencies = await db.competency.findMany({
-    include: { competency_domains: { include: { domain: true } } },
-  });
-  const allDomains = await db.skillDomain.findMany({ orderBy: { name: 'asc' } });
-  const domainNames = allDomains.map((d) => d.name);
+  const { allCompetencies, domainNames } = await loadReportSkillContext();
 
   // Read stored competency scores for this employee
   const storedMap = await getStoredCompScores([employeeId]);
   const compScoreMap = storedMap.get(employeeId) ?? new Map<number, number>();
 
   // Fetch department-specific grade matrix thresholds for target grade
-  const gradeMatrices = employee.department_id
-    ? await db.gradeMatrix.findMany({
-        where: { department_id: employee.department_id, grade_id: employee.target_grade_id },
-      })
-    : [];
-  const thresholdMap = new Map<number, number>(gradeMatrices.map((gm) => [gm.competency_id, gm.threshold]));
+  const gradeThresholds = await loadGradeThresholds(
+    employee.department_id ? [employee.department_id] : [],
+    [employee.target_grade_id]
+  );
+  const thresholdMap = getGradeThresholdMap(
+    gradeThresholds,
+    employee.department_id,
+    employee.target_grade_id
+  );
 
   const gaps: GapEntry[] = allCompetencies.map((comp) => {
-    const pd = getPrimaryDomain(comp.competency_domains, employee.department_id);
-    const score = compScoreMap.get(comp.id) ?? 0;
-    const threshold = thresholdMap.get(comp.id) ?? 0;
-    const gap = Math.max(0, threshold - score);
+    const gap = buildCompetencyGapDetail(comp, compScoreMap, thresholdMap, {
+      departmentId: employee.department_id,
+      mode: 'missing',
+    });
     return {
       competency_id: comp.id,
       competency_name: comp.name,
-      domain_name: pd.name,
-      score,
-      threshold,
-      gap,
-      meets_grade: score >= threshold,
-      is_critical: comp.is_critical,
+      domain_name: gap.domain,
+      score: gap.score,
+      threshold: gap.threshold,
+      gap: gap.gap,
+      meets_grade: gap.meets,
+      is_critical: gap.is_critical,
     };
   });
 
@@ -148,8 +105,9 @@ export async function gapAnalysis(employeeId: number) {
 
   // Only count competencies that have a threshold defined for the target grade
   // (consistent with promotionReadiness which uses threshold_count)
-  const meets_count = gaps.filter((g) => g.threshold > 0 && g.meets_grade).length;
-  const total_competencies = gaps.filter((g) => g.threshold > 0).length;
+  const readiness = summarizeReadiness(gaps.map((gap) => ({ threshold: gap.threshold, meets: gap.meets_grade })));
+  const meets_count = readiness.meetsCount;
+  const total_competencies = readiness.totalWithThreshold;
 
   // overall_score: weighted by domain grade weights for the employee's target grade
   const domainWeightMap = await loadDomainWeights([employee.target_grade_id]);
@@ -158,16 +116,9 @@ export async function gapAnalysis(employeeId: number) {
   const overall_score = weightedOverall(domainScores, gradeWeights);
 
   return {
-    employee: {
-      id: employee.id,
-      emp_code: employee.emp_code,
-      full_name: employee.full_name,
-      department: employee.dept?.name ?? employee.department,
-      current_grade: employee.current_grade.code,
-      target_grade: employee.target_grade.code,
-    },
+    employee: buildGapAnalysisEmployeeSummary(employee),
     overall_score,
-    promotion_ready: meets_count === total_competencies && total_competencies > 0,
+    promotion_ready: readiness.promotionReady,
     total_competencies,
     meets_count,
     gaps,
@@ -176,47 +127,16 @@ export async function gapAnalysis(employeeId: number) {
 
 // ── 2. Promotion Readiness ────────────────────────────────────────────────────
 
-async function getEmployeesForManager(userId: number, managerId: number, role: RoleCode, employeeId?: number) {
-  const accessibleEmployeeIds = await accessScopeService.getAccessibleEmployeeIds({
-    id: userId,
-    employeeId: managerId,
-    role,
-  });
-  const scopedIds = employeeId
-    ? accessibleEmployeeIds.filter((id) => id === employeeId)
-    : accessibleEmployeeIds;
-
-  if (scopedIds.length === 0) return [];
-
-  if (employeeId) {
-    return db.employee.findMany({
-      where: {
-        id: { in: scopedIds },
-        deleted_at: null,
-      },
-      include: { current_grade: true, target_grade: true, dept: true },
-    });
-  }
-  return db.employee.findMany({
-    where: { id: { in: scopedIds }, deleted_at: null },
-    include: { current_grade: true, target_grade: true, dept: true },
-  });
-}
-
 export async function promotionReadiness(userId: number, managerId: number, role: RoleCode) {
   logger.info({ managerId, role }, 'Running promotion readiness report');
 
   const employees = await getEmployeesForManager(userId, managerId, role);
   const employeeIds = employees.map((e) => e.id);
 
-  const allCompetencies = await db.competency.findMany({
-    include: { competency_domains: { include: { domain: true } } },
-  });
-  const allDomains = await db.skillDomain.findMany({ orderBy: { name: 'asc' } });
-  const domainNames = allDomains.map((d) => d.name);
+  const { allCompetencies, domainNames } = await loadReportSkillContext();
 
-  const targetGradeIds = [...new Set(employees.map((e) => e.target_grade_id))];
-  const departmentIds = [...new Set(employees.map((e) => e.department_id).filter((id): id is number => id != null))];
+  const targetGradeIds = getReportTargetGradeIds(employees);
+  const departmentIds = getReportDepartmentIds(employees);
   const gradeThresholds = await loadGradeThresholds(departmentIds, targetGradeIds);
 
   const domainWeightMap = await loadDomainWeights(targetGradeIds);
@@ -233,27 +153,17 @@ export async function promotionReadiness(userId: number, managerId: number, role
     const domainScores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
     const overall_score = weightedOverall(domainScores, domainWeightMap.get(emp.target_grade_id));
 
-    const thresholdMap = new Map<number, number>();
-    for (const comp of allCompetencies) {
-      const thresholds = emp.department_id
-        ? gradeThresholds.get(`${emp.department_id}:${emp.target_grade_id}`)
-        : undefined;
-      thresholdMap.set(comp.id, thresholds?.get(comp.id) ?? 0);
-    }
+    const thresholds = getGradeThresholdMap(gradeThresholds, emp.department_id, emp.target_grade_id);
+    const thresholdMap = buildCompetencyThresholdMap(allCompetencies, thresholds);
     const {
       averageThreshold: avg_threshold,
       thresholdCount: threshold_count,
       meetsCount: meets_count,
+      promotionReady: promotion_ready,
     } = buildThresholdStats(allCompetencies, compScoreMap, thresholdMap);
-    const promotion_ready = threshold_count > 0 && meets_count === threshold_count;
 
     results.push({
-      employee_id: emp.id,
-      emp_code: emp.emp_code,
-      full_name: emp.full_name,
-      department: emp.dept?.name ?? emp.department,
-      current_grade: emp.current_grade.code,
-      target_grade: emp.target_grade.code,
+      ...buildReportEmployeeSummary(emp),
       overall_score,
       avg_threshold,
       meets_count,
@@ -275,13 +185,9 @@ export async function competencyScores(userId: number, managerId: number, role: 
   const employees = await getEmployeesForManager(userId, managerId, role);
   const employeeIds = employees.map((e) => e.id);
 
-  const allCompetencies = await db.competency.findMany({
-    include: { competency_domains: { include: { domain: true } } },
-  });
-  const allDomains = await db.skillDomain.findMany({ orderBy: { name: 'asc' } });
-  const domainNames = allDomains.map((d) => d.name);
+  const { allCompetencies, domainNames } = await loadReportSkillContext();
 
-  const targetGradeIds = [...new Set(employees.map((e) => e.target_grade_id))];
+  const targetGradeIds = getReportTargetGradeIds(employees);
   const domainWeightMap = await loadDomainWeights(targetGradeIds);
   const storedScores = await getStoredCompScores(employeeIds);
 
@@ -293,14 +199,7 @@ export async function competencyScores(userId: number, managerId: number, role: 
     const overall_score = weightedOverall(domain_scores, domainWeightMap.get(emp.target_grade_id));
 
     results.push({
-      employee_id: emp.id,
-      full_name: emp.full_name,
-      emp_code: emp.emp_code,
-      department: emp.dept?.name ?? emp.department,
-      current_grade: emp.current_grade.code,
-      current_grade_title: emp.current_grade.title,
-      target_grade: emp.target_grade.code,
-      target_grade_title: emp.target_grade.title,
+      ...buildReportEmployeeSummaryWithGradeTitles(emp),
       domain_scores,
       overall_score,
     });
@@ -322,7 +221,7 @@ export async function assessmentHistory(
 
   const skip = (page - 1) * limit;
 
-  const employeeIds = await accessScopeService.getAccessibleEmployeeIds({ id: userId, employeeId: managerId, role });
+  const employeeIds = await getAccessibleReportEmployeeIds(userId, managerId, role);
   const where = { employee_id: { in: employeeIds } };
 
   const [total, assessments] = await Promise.all([
@@ -375,21 +274,11 @@ export async function competencyMatrix(userId: number, managerId: number, role: 
   const employees = await getEmployeesForManager(userId, managerId, role, employeeId);
   const employeeIds = employees.map((e) => e.id);
 
-  const allCompetencies = await db.competency.findMany({
-    include: { competency_domains: { include: { domain: true } } },
-  });
-  const allDomains = await db.skillDomain.findMany({ orderBy: { name: 'asc' } });
-  const domainNames = allDomains.map((d) => d.name);
+  const { allCompetencies, competencyById, domainNames } = await loadReportSkillContext();
 
-  // Order: domain name → competency name
-  const orderedComps = allCompetencies
-    .map((comp) => {
-      const pd = getPrimaryDomain(comp.competency_domains);
-      return { id: comp.id, name: comp.name, domain_name: pd.name, is_critical: comp.is_critical };
-    })
-    .sort((a, b) => a.domain_name.localeCompare(b.domain_name) || a.name.localeCompare(b.name));
+  const orderedComps = buildOrderedReportCompetencies(allCompetencies);
 
-  const targetGradeIds = [...new Set(employees.map((e) => e.target_grade_id))];
+  const targetGradeIds = getReportTargetGradeIds(employees);
   const domainWeightMap = await loadDomainWeights(targetGradeIds);
   const storedScores = await getStoredCompScores(employeeIds);
 
@@ -401,8 +290,8 @@ export async function competencyMatrix(userId: number, managerId: number, role: 
     const competency_scores: Record<string, { score: number; domain: string; is_critical: boolean }> = {};
     for (const comp of orderedComps) {
       const score = compScoreMap.get(comp.id) ?? 0;
-      const source = allCompetencies.find((c) => c.id === comp.id);
-      const domain = source ? getPrimaryDomain(source.competency_domains, emp.department_id).name : comp.domain_name;
+      const source = competencyById.get(comp.id);
+      const domain = source ? getPrimaryDomain(source.competency_domains, emp.department_id).name : comp.domain;
       competency_scores[comp.name] = { score, domain, is_critical: comp.is_critical };
     }
 
@@ -410,12 +299,7 @@ export async function competencyMatrix(userId: number, managerId: number, role: 
     const overall_score = weightedOverall(domain_scores, domainWeightMap.get(emp.target_grade_id));
 
     results.push({
-      employee_id: emp.id,
-      emp_code: emp.emp_code,
-      full_name: emp.full_name,
-      department: emp.dept?.name ?? emp.department,
-      current_grade: emp.current_grade.code,
-      target_grade: emp.target_grade.code,
+      ...buildReportEmployeeSummary(emp),
       overall_score,
       competency_scores,
     });
@@ -427,7 +311,7 @@ export async function competencyMatrix(userId: number, managerId: number, role: 
     employees: results,
     competencies: orderedComps.map((c) => ({
       name: c.name,
-      domain: c.domain_name,
+      domain: c.domain,
       is_critical: c.is_critical,
     })),
   };
@@ -441,22 +325,12 @@ export async function gapMatrix(userId: number, managerId: number, role: RoleCod
   const employees = await getEmployeesForManager(userId, managerId, role, employeeId);
   const employeeIds = employees.map((e) => e.id);
 
-  const allCompetencies = await db.competency.findMany({
-    include: { competency_domains: { include: { domain: true } } },
-  });
+  const { allCompetencies, competencyById, domainNames } = await loadReportSkillContext();
 
-  const allDomains = await db.skillDomain.findMany({ orderBy: { name: 'asc' } });
-  const domainNames = allDomains.map((d) => d.name);
+  const orderedComps = buildOrderedReportCompetencies(allCompetencies);
 
-  const orderedComps = allCompetencies
-    .map((comp) => {
-      const pd = getPrimaryDomain(comp.competency_domains);
-      return { id: comp.id, name: comp.name, domain: pd.name, is_critical: comp.is_critical };
-    })
-    .sort((a, b) => a.domain.localeCompare(b.domain) || a.name.localeCompare(b.name));
-
-  const targetGradeIds = [...new Set(employees.map((e) => e.target_grade_id))];
-  const departmentIds = [...new Set(employees.map((e) => e.department_id).filter((id): id is number => id != null))];
+  const targetGradeIds = getReportTargetGradeIds(employees);
+  const departmentIds = getReportDepartmentIds(employees);
   const matrixMap = await loadGradeThresholds(departmentIds, targetGradeIds);
   const domainWeightMap = await loadDomainWeights(targetGradeIds);
   const storedScores = await getStoredCompScores(employeeIds);
@@ -472,43 +346,31 @@ export async function gapMatrix(userId: number, managerId: number, role: RoleCod
 
   for (const emp of employees) {
     const compScoreMap = storedScores.get(emp.id) ?? new Map<number, number>();
-    const thresholds = emp.department_id
-      ? matrixMap.get(`${emp.department_id}:${emp.target_grade_id}`) ?? new Map<number, number>()
-      : new Map<number, number>();
+    const thresholds = getGradeThresholdMap(matrixMap, emp.department_id, emp.target_grade_id);
 
     // Competency gaps
     const competency_gaps: Record<string, {
       score: number; threshold: number; gap: number; domain: string; is_critical: boolean; meets: boolean;
     }> = {};
     for (const comp of orderedComps) {
-      const score = compScoreMap.get(comp.id) ?? 0;
-      const threshold = thresholds.get(comp.id) ?? 0;
-      const source = allCompetencies.find((c) => c.id === comp.id);
-      const domain = source ? getPrimaryDomain(source.competency_domains, emp.department_id).name : comp.domain;
-      competency_gaps[comp.name] = { score, threshold, gap: score - threshold, domain, is_critical: comp.is_critical, meets: score >= threshold };
+      const source = competencyById.get(comp.id);
+      const gap = buildCompetencyGapDetail(
+        source ?? { id: comp.id, is_critical: comp.is_critical },
+        compScoreMap,
+        thresholds,
+        { departmentId: emp.department_id, fallbackDomain: comp.domain }
+      );
+      competency_gaps[comp.name] = {
+        score: gap.score,
+        threshold: gap.threshold,
+        gap: gap.gap,
+        domain: gap.domain,
+        is_critical: gap.is_critical,
+        meets: gap.meets,
+      };
     }
 
-    // Domain gaps = avg over competencies in that domain
-    const domainAcc = new Map<string, { scoreSum: number; threshSum: number; count: number }>();
-    for (const dn of domainNames) domainAcc.set(dn, { scoreSum: 0, threshSum: 0, count: 0 });
-    for (const comp of orderedComps) {
-      const cg = competency_gaps[comp.name];
-      const acc = domainAcc.get(cg.domain);
-      if (!acc) continue;
-      if (cg.threshold > 0 || cg.score > 0) {
-        acc.scoreSum += cg.score;
-        acc.threshSum += cg.threshold;
-        acc.count++;
-      }
-    }
-    const domain_gaps: Record<string, { score: number; threshold: number; gap: number; meets: boolean }> = {};
-    for (const dn of domainNames) {
-      const acc = domainAcc.get(dn)!;
-      if (acc.count === 0) continue;
-      const score = acc.scoreSum / acc.count;
-      const threshold = acc.threshSum / acc.count;
-      domain_gaps[dn] = { score, threshold, gap: score - threshold, meets: score >= threshold };
-    }
+    const domain_gaps = buildDomainGapSummary(Object.values(competency_gaps), domainNames);
 
     const gradeWeights = domainWeightMap.get(emp.target_grade_id);
     // overall_score: use buildDomainScores (consistent with all other report functions)
@@ -519,16 +381,14 @@ export async function gapMatrix(userId: number, managerId: number, role: RoleCod
       Object.entries(domain_gaps).filter(([, d]) => d.threshold > 0).map(([k, d]) => [k, d.threshold])
     );
     const overall_threshold = weightedOverall(thresholdRecord, gradeWeights);
-    const meets_count = Object.values(competency_gaps).filter((c) => c.meets && c.threshold > 0).length;
-    const total_with_threshold = Object.values(competency_gaps).filter((c) => c.threshold > 0).length;
+    const readiness = summarizeReadiness(Object.values(competency_gaps));
+    const overall_gap = calculateCompetencyGap(overall_score, overall_threshold).gap;
 
     results.push({
-      employee_id: emp.id, emp_code: emp.emp_code, full_name: emp.full_name,
-      department: emp.dept?.name ?? emp.department,
-      current_grade: emp.current_grade.code, target_grade: emp.target_grade.code,
-      overall_score, overall_threshold, overall_gap: overall_score - overall_threshold,
-      meets_count, total_with_threshold,
-      promotion_ready: meets_count === total_with_threshold && total_with_threshold > 0,
+      ...buildReportEmployeeSummary(emp),
+      overall_score, overall_threshold, overall_gap,
+      meets_count: readiness.meetsCount, total_with_threshold: readiness.totalWithThreshold,
+      promotion_ready: readiness.promotionReady,
       domain_gaps, competency_gaps,
     });
   }
@@ -550,13 +410,9 @@ export async function skillsSummary(userId: number, managerId: number, role: Rol
   const employees = await getEmployeesForManager(userId, managerId, role, employeeId);
   const employeeIds = employees.map((e) => e.id);
 
-  const allCompetencies = await db.competency.findMany({
-    include: { competency_domains: { include: { domain: true } } },
-  });
-  const allDomains = await db.skillDomain.findMany({ orderBy: { name: 'asc' } });
-  const domainNames = allDomains.map((d) => d.name);
+  const { allCompetencies, domainNames } = await loadReportSkillContext();
 
-  const targetGradeIds = [...new Set(employees.map((e) => e.target_grade_id))];
+  const targetGradeIds = getReportTargetGradeIds(employees);
   const domainWeightMap = await loadDomainWeights(targetGradeIds);
   const storedScores = await getStoredCompScores(employeeIds);
 
@@ -568,12 +424,7 @@ export async function skillsSummary(userId: number, managerId: number, role: Rol
     const final_score = weightedOverall(domain_scores, domainWeightMap.get(emp.target_grade_id));
 
     results.push({
-      employee_id: emp.id,
-      emp_code: emp.emp_code,
-      full_name: emp.full_name,
-      department: emp.dept?.name ?? emp.department,
-      current_grade: emp.current_grade.code,
-      target_grade: emp.target_grade.code,
+      ...buildReportEmployeeSummary(emp),
       domain_scores,
       final_score,
       star_rating: scoreToSkillSummaryStarRating(final_score),

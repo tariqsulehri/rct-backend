@@ -1,23 +1,31 @@
 import {
+  buildCompetencyGapDetail,
+  buildCompetencyThresholdMap,
+  buildDomainGapSummary,
   buildDomainScores,
   buildThresholdStats,
+  calculateCompetencyGap,
   getPrimaryDomain,
   scoreToPromotionStarRating,
   scoreToSkillSummaryStarRating,
+  summarizeReadiness,
   weightedOverall,
 } from './reporting.engine';
 
 const competencies = [
   {
     id: 1,
+    is_critical: true,
     competency_domains: [{ is_primary: true, domain: { id: 10, name: 'Cloud' } }],
   },
   {
     id: 2,
+    is_critical: false,
     competency_domains: [{ is_primary: true, domain: { id: 20, name: 'SRE' } }],
   },
   {
     id: 3,
+    is_critical: false,
     competency_domains: [{ is_primary: true, domain: { id: 10, name: 'Cloud' } }],
   },
 ];
@@ -74,6 +82,117 @@ describe('reporting engine', () => {
       averageThreshold: 0.625,
       thresholdCount: 2,
       meetsCount: 1,
+      promotionReady: false,
+    });
+  });
+
+  it('builds a complete competency threshold map with zero for missing thresholds', () => {
+    const thresholds = new Map([[1, 0.75]]);
+
+    expect(buildCompetencyThresholdMap(competencies, thresholds)).toEqual(new Map([
+      [1, 0.75],
+      [2, 0],
+      [3, 0],
+    ]));
+
+    expect(buildCompetencyThresholdMap(competencies)).toEqual(new Map([
+      [1, 0],
+      [2, 0],
+      [3, 0],
+    ]));
+  });
+
+  it('calculates missing-only and signed gaps without changing meets logic', () => {
+    expect(calculateCompetencyGap(0.4, 0.75, 'missing')).toEqual({
+      score: 0.4,
+      threshold: 0.75,
+      gap: 0.35,
+      meets: false,
+    });
+    expect(calculateCompetencyGap(0.9, 0.75, 'missing')).toEqual({
+      score: 0.9,
+      threshold: 0.75,
+      gap: 0,
+      meets: true,
+    });
+    expect(calculateCompetencyGap(0.9, 0.75)).toEqual({
+      score: 0.9,
+      threshold: 0.75,
+      gap: 0.15000000000000002,
+      meets: true,
+    });
+  });
+
+  it('builds competency gap details for report rows', () => {
+    const scores = new Map([[1, 0.4]]);
+    const thresholds = new Map([[1, 0.75]]);
+
+    expect(buildCompetencyGapDetail(competencies[0], scores, thresholds, { mode: 'missing' })).toEqual({
+      score: 0.4,
+      threshold: 0.75,
+      gap: 0.35,
+      meets: false,
+      domain: 'Cloud',
+      is_critical: true,
+    });
+
+    expect(buildCompetencyGapDetail(competencies[0], scores, thresholds)).toEqual({
+      score: 0.4,
+      threshold: 0.75,
+      gap: -0.35,
+      meets: false,
+      domain: 'Cloud',
+      is_critical: true,
+    });
+
+    expect(buildCompetencyGapDetail(
+      { id: 99, is_critical: false },
+      scores,
+      thresholds,
+      { fallbackDomain: 'Fallback' }
+    )).toEqual({
+      score: 0,
+      threshold: 0,
+      gap: 0,
+      meets: true,
+      domain: 'Fallback',
+      is_critical: false,
+    });
+  });
+
+  it('summarizes readiness using only competencies with configured thresholds', () => {
+    expect(summarizeReadiness([
+      { threshold: 0.75, meets: true },
+      { threshold: 0.50, meets: false },
+      { threshold: 0, meets: true },
+    ])).toEqual({
+      meetsCount: 1,
+      totalWithThreshold: 2,
+      promotionReady: false,
+    });
+
+    expect(summarizeReadiness([
+      { threshold: 0.75, meets: true },
+      { threshold: 0.50, meets: true },
+    ])).toEqual({
+      meetsCount: 2,
+      totalWithThreshold: 2,
+      promotionReady: true,
+    });
+  });
+
+  it('builds signed domain gap summaries from competency gap rows', () => {
+    expect(buildDomainGapSummary([
+      { domain: 'Cloud', score: 0.8, threshold: 0.75 },
+      { domain: 'Cloud', score: 0.4, threshold: 0.5 },
+      { domain: 'SRE', score: 0, threshold: 0 },
+    ], ['Cloud', 'SRE'])).toEqual({
+      Cloud: {
+        score: 0.6000000000000001,
+        threshold: 0.625,
+        gap: -0.02499999999999991,
+        meets: false,
+      },
     });
   });
 

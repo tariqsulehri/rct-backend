@@ -17,6 +17,7 @@ import {
   UpdateSkillDomainInput,
   CreateCompetencyInput,
   UpdateCompetencyInput,
+  SyncDepartmentSkillMapInput,
   CreateTechnologyInput,
   UpdateTechnologyInput,
   CreateDepartmentInput,
@@ -178,6 +179,33 @@ async function validateEmployeeGradesForDepartment(
       code: 'GRADE_DEPARTMENT_MISMATCH',
     });
   }
+}
+
+async function resolveSingleSkillDomain(domainIds: number[], providedCategoryId?: number) {
+  const uniqueDomainIds = [...new Set(domainIds)];
+  if (uniqueDomainIds.length !== 1) {
+    throw Object.assign(new Error('Please select exactly one skill area for this skill.'), {
+      statusCode: 400,
+      code: 'SINGLE_SKILL_AREA_REQUIRED',
+    });
+  }
+
+  const domain = await db.skillDomain.findUnique({ where: { id: uniqueDomainIds[0] } });
+  if (!domain) {
+    throw Object.assign(new Error('Selected skill area was not found.'), {
+      statusCode: 400,
+      code: 'SKILL_AREA_NOT_FOUND',
+    });
+  }
+
+  if (providedCategoryId !== undefined && providedCategoryId !== domain.category_id) {
+    throw Object.assign(new Error('Skill category must match the selected skill area category.'), {
+      statusCode: 400,
+      code: 'SKILL_CATEGORY_MISMATCH',
+    });
+  }
+
+  return domain;
 }
 
 export const configService = {
@@ -1180,6 +1208,7 @@ export const configService = {
   async listSkillDomains() {
     return db.skillDomain.findMany({
       include: {
+        category: true,
         competency_domains: { include: { competency: true } },
         grade_weights: { select: { grade_id: true, weight: true } },
       },
@@ -1289,48 +1318,84 @@ export const configService = {
 
   async createCompetency(data: CreateCompetencyInput) {
     const { category_id, department_id, domain_ids, ...rest } = data as any;
+    const domain = await resolveSingleSkillDomain(domain_ids, category_id);
     const comp = await db.competency.create({
-      data: { ...rest, category_id },
+      data: { ...rest, category_id: domain.category_id },
     });
     const departmentId = department_id ?? await getDefaultDepartmentId();
-    if (Array.isArray(domain_ids) && domain_ids.length > 0) {
-      await db.competencyDomainMap.createMany({
-        data: domain_ids.map((domain_id: number, i: number) => ({
-          department_id: departmentId,
-          competency_id: comp.id,
-          domain_id,
-          is_primary: i === 0,
-        })),
-      });
-    }
+    await db.competencyDomainMap.create({
+      data: {
+        department_id: departmentId,
+        competency_id: comp.id,
+        domain_id: domain.id,
+        is_primary: true,
+      },
+    });
     return comp;
   },
 
   async updateCompetency(id: number, data: UpdateCompetencyInput) {
     const { category_id, department_id, domain_ids, ...rest } = data as any;
+    const domain = Array.isArray(domain_ids)
+      ? await resolveSingleSkillDomain(domain_ids, category_id)
+      : undefined;
+    if (category_id !== undefined && !domain) {
+      throw Object.assign(new Error('Skill category is derived from skill area. Select a skill area to change it.'), {
+        statusCode: 400,
+        code: 'SKILL_AREA_REQUIRED_FOR_CATEGORY',
+      });
+    }
     const comp = await db.competency.update({
       where: { id },
-      data: { ...rest, ...(category_id !== undefined ? { category_id } : {}) },
+      data: { ...rest, ...(domain ? { category_id: domain.category_id } : {}) },
     });
-    if (Array.isArray(domain_ids)) {
+    if (domain) {
       const departmentId = department_id ?? await getDefaultDepartmentId();
       await db.competencyDomainMap.deleteMany({ where: { competency_id: id, department_id: departmentId } });
-      if (domain_ids.length > 0) {
-        await db.competencyDomainMap.createMany({
-          data: domain_ids.map((domain_id: number, i: number) => ({
-            department_id: departmentId,
-            competency_id: id,
-            domain_id,
-            is_primary: i === 0,
-          })),
-        });
-      }
+      await db.competencyDomainMap.create({
+        data: {
+          department_id: departmentId,
+          competency_id: id,
+          domain_id: domain.id,
+          is_primary: true,
+        },
+      });
     }
     return comp;
   },
 
   async deleteCompetency(id: number) {
     return db.competency.delete({ where: { id } });
+  },
+
+  async syncDepartmentSkillMap(data: SyncDepartmentSkillMapInput) {
+    const competencyIds = [...new Set(data.mappings.map((mapping) => mapping.competency_id))];
+
+    await db.$transaction(async (tx) => {
+      if (competencyIds.length === 0) return;
+
+      await tx.competencyDomainMap.deleteMany({
+        where: {
+          department_id: data.department_id,
+          competency_id: { in: competencyIds },
+        },
+      });
+
+      const rows = data.mappings.flatMap((mapping) =>
+        [...new Set(mapping.domain_ids)].map((domain_id, index) => ({
+          department_id: data.department_id,
+          competency_id: mapping.competency_id,
+          domain_id,
+          is_primary: index === 0,
+        }))
+      );
+
+      if (rows.length > 0) {
+        await tx.competencyDomainMap.createMany({ data: rows, skipDuplicates: true });
+      }
+    });
+
+    return this.listCompetencies();
   },
 
   // ── Technologies ───────────────────────────────────────────────────────────

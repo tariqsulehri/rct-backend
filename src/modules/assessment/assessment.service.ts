@@ -10,102 +10,30 @@ import {
 } from './assessment.schema';
 import {
   computeAssessmentScore,
-  computeCompetencyScore,
-  DEFAULT_SCORING_VALUES,
-  LEVEL_WEIGHT,
-  LevelWeights,
-  ProjectCredits,
-  ScoringValues,
 } from '../../scoring/scoring.engine';
+import { createScoringConfigService } from '../../scoring/scoring-config.service';
+import { createScoreRecalculationService } from '../../scoring/score-recalculation.service';
+
+const scoringConfigService = createScoringConfigService(db);
+const scoreRecalculationService = createScoreRecalculationService(db, {
+  scoringConfigService,
+  logger,
+  swallowErrors: true,
+});
 
 // ─── Synchronous Scoring ─────────────────────────────────────────────────────
 // Recomputes CompetencyScore for every competency touched by this employee's
 // assessments. Called after every create/update/approval so reports are fresh
 // immediately after assessment changes.
 
-// ── Configured assessment type values ────────────────────────────────────────
-
-async function getConfiguredScoringValues(): Promise<ScoringValues> {
-  try {
-    const configs = await db.assessmentTypeConfig.findMany({
-      where: { code: { in: ['Primary', 'Secondary', 'Tertiary'] }, is_active: true },
-    });
-    const byCode = new Map(configs.map((config) => [config.code, config.weight]));
-    return {
-      primary: byCode.get('Primary') ?? DEFAULT_SCORING_VALUES.primary,
-      secondary: byCode.get('Secondary') ?? DEFAULT_SCORING_VALUES.secondary,
-      tertiary: byCode.get('Tertiary') ?? DEFAULT_SCORING_VALUES.tertiary,
-    };
-  } catch {
-    return DEFAULT_SCORING_VALUES;
-  }
-}
-
-async function getConfiguredLevelWeights(): Promise<LevelWeights> {
-  try {
-    const configs = await db.assessmentLevelConfig.findMany({ where: { is_active: true } });
-    return {
-      ...LEVEL_WEIGHT,
-      ...Object.fromEntries(configs.map((config) => [config.code, config.weight])),
-    };
-  } catch {
-    return LEVEL_WEIGHT;
-  }
-}
-
-async function getConfiguredProjectCredits(): Promise<ProjectCredits> {
-  try {
-    const configs = await db.assessmentProjectConfig.findMany({ where: { is_active: true } });
-    return Object.fromEntries(configs.map((config) => [config.project_count, config.credit]));
-  } catch {
-    return {};
-  }
-}
-
-async function getScoredAssessmentStatuses(): Promise<string[]> {
-  try {
-    const configs = await db.assessmentStatusConfig.findMany({
-      where: { is_active: true, counts_toward_score: true },
-      select: { code: true },
-    });
-    const statuses = configs.map((config) => config.code);
-    return statuses.length > 0 ? statuses : ['approved'];
-  } catch {
-    return ['approved'];
-  }
-}
-
-async function getConfiguredStatusCode(
-  preferredCode: string,
-  where: { counts_toward_score?: boolean; is_terminal?: boolean },
-  fallbackCode: string,
-): Promise<string> {
-  try {
-    const preferred = await db.assessmentStatusConfig.findUnique({
-      where: { code: preferredCode },
-      select: { code: true, is_active: true },
-    });
-    if (preferred?.is_active) return preferred.code;
-
-    const configured = await db.assessmentStatusConfig.findFirst({
-      where: { is_active: true, ...where },
-      orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
-      select: { code: true },
-    });
-    return configured?.code ?? fallbackCode;
-  } catch {
-    return fallbackCode;
-  }
-}
-
 async function getInitialAssessmentStatus(isEngineer: boolean): Promise<string> {
   return isEngineer
-    ? getConfiguredStatusCode('pending', { counts_toward_score: false, is_terminal: false }, 'pending')
-    : getConfiguredStatusCode('approved', { counts_toward_score: true, is_terminal: true }, 'approved');
+    ? scoringConfigService.getConfiguredStatusCode('pending', { counts_toward_score: false, is_terminal: false }, 'pending')
+    : scoringConfigService.getConfiguredStatusCode('approved', { counts_toward_score: true, is_terminal: true }, 'approved');
 }
 
 async function getApprovalStatus(): Promise<string> {
-  return getConfiguredStatusCode('approved', { counts_toward_score: true, is_terminal: true }, 'approved');
+  return scoringConfigService.getConfiguredStatusCode('approved', { counts_toward_score: true, is_terminal: true }, 'approved');
 }
 
 async function getAssessmentReferenceIds(
@@ -128,98 +56,6 @@ async function getAssessmentReferenceIds(
     competencyId: technology.competency_id,
     domainId: domainMap?.domain_id ?? null,
   };
-}
-
-async function recomputeScoresForEmployee(employeeId: number): Promise<void> {
-  try {
-    // Fetch configured type values once for all competencies.
-    const [scoringValues, levelWeights, projectCredits, scoredStatuses, employee] = await Promise.all([
-      getConfiguredScoringValues(),
-      getConfiguredLevelWeights(),
-      getConfiguredProjectCredits(),
-      getScoredAssessmentStatuses(),
-      db.employee.findUnique({
-        where: { id: employeeId },
-        select: { department_id: true },
-      }),
-    ]);
-    const departmentId = employee?.department_id ?? null;
-
-    // 1. Find every competency that has at least one technology assessed
-    const assessed = await db.skillAssessment.findMany({
-      where: { employee_id: employeeId },
-      include: { technology: { select: { competency_id: true } } },
-    });
-
-    const competencyIds = [...new Set(assessed.map((a) => a.technology.competency_id))];
-
-    // 2. Also recompute competencies with no remaining assessments (score → null)
-    const existingScores = await db.competencyScore.findMany({
-      where: { employee_id: employeeId },
-      select: { competency_id: true },
-    });
-    const allCompetencyIds = [
-      ...new Set([...competencyIds, ...existingScores.map((s) => s.competency_id)]),
-    ];
-
-    for (const competencyId of allCompetencyIds) {
-      await recomputeOneCompetency(employeeId, competencyId, departmentId, scoredStatuses, scoringValues, levelWeights, projectCredits);
-    }
-  } catch (err) {
-    logger.error({ err, employeeId }, 'recomputeScoresForEmployee failed');
-  }
-}
-
-async function recomputeOneCompetency(
-  employeeId: number,
-  competencyId: number,
-  departmentId: number | null,
-  scoredStatuses: string[],
-  scoringValues: ScoringValues = DEFAULT_SCORING_VALUES,
-  levelWeights: LevelWeights = LEVEL_WEIGHT,
-  projectCredits: ProjectCredits = {},
-): Promise<void> {
-  // All technologies for this competency
-  const technologies = await db.technology.findMany({
-    where: { competency_id: competencyId },
-    select: { id: true },
-  });
-
-  const techIds = technologies.map((t) => t.id);
-
-  // Only approved assessments count toward the score
-  const assessments = await db.skillAssessment.findMany({
-    where: { employee_id: employeeId, technology_id: { in: techIds }, status: { in: scoredStatuses } },
-  });
-
-  if (assessments.length === 0) {
-    await db.competencyScore.upsert({
-      where: { employee_id_competency_id: { employee_id: employeeId, competency_id: competencyId } },
-      create: { employee_id: employeeId, department_id: departmentId, competency_id: competencyId, score: null, level_label: null, star_rating: null },
-      update: { department_id: departmentId, score: null, level_label: null, star_rating: null },
-    });
-    return;
-  }
-
-  const { score, starRating, levelLabel } = computeCompetencyScore(
-    assessments.map((assessment) => ({
-      type: assessment.type,
-      projects: assessment.projects,
-      level: assessment.level,
-      storedScore: assessment.score,
-    })),
-    scoringValues,
-    levelWeights,
-    projectCredits,
-  );
-
-  await db.competencyScore.upsert({
-    where: { employee_id_competency_id: { employee_id: employeeId, competency_id: competencyId } },
-    create: { employee_id: employeeId, department_id: departmentId, competency_id: competencyId, score, level_label: levelLabel, star_rating: starRating },
-    update: { department_id: departmentId, score, level_label: levelLabel, star_rating: starRating },
-  });
-
-  logger.debug({ employeeId, competencyId, score, starRating, levelLabel, scoringValues }, 'Competency score recomputed');
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
@@ -247,11 +83,7 @@ export const assessmentService = {
       const isEngineer = role === 'ENGINEER';
       const status = await getInitialAssessmentStatus(isEngineer);
 
-      const [scoringValues, levelWeights, projectCredits] = await Promise.all([
-        getConfiguredScoringValues(),
-        getConfiguredLevelWeights(),
-        getConfiguredProjectCredits(),
-      ]);
+      const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const level = request.level ?? 'Unset';
       const assessmentScore = computeAssessmentScore(request.type, request.projects, level, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(request.technology_id);
@@ -290,7 +122,7 @@ export const assessmentService = {
 
       logger.info({ assessmentId: assessment.id, empCode: request.employee_id }, 'Skill assessment saved');
 
-      await recomputeScoresForEmployee(empInternalId);
+      await scoreRecalculationService.recomputeScoresForEmployee(empInternalId);
 
       const tech = await db.technology.findUnique({
         where: { id: request.technology_id },
@@ -345,11 +177,7 @@ export const assessmentService = {
       const newType = request.type ?? current.type;
       const newProjects = request.projects ?? current.projects;
       const newLevel = request.level ?? current.level;
-      const [scoringValues, levelWeights, projectCredits] = await Promise.all([
-        getConfiguredScoringValues(),
-        getConfiguredLevelWeights(),
-        getConfiguredProjectCredits(),
-      ]);
+      const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const assessmentScore = computeAssessmentScore(newType, newProjects, newLevel, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(current.technology_id);
 
@@ -369,7 +197,7 @@ export const assessmentService = {
 
       logger.info({ assessmentId: id }, 'Skill assessment updated');
 
-      await recomputeScoresForEmployee(assessment.employee_id);
+      await scoreRecalculationService.recomputeScoresForEmployee(assessment.employee_id);
 
       const [emp, assessor] = await Promise.all([
         db.employee.findUnique({ where: { id: assessment.employee_id }, select: { emp_code: true } }),
@@ -409,11 +237,7 @@ export const assessmentService = {
       const newType = request.type ?? current.type;
       const newProjects = request.projects ?? current.projects;
       const newLevel = request.level ?? current.level;
-      const [scoringValues, levelWeights, projectCredits] = await Promise.all([
-        getConfiguredScoringValues(),
-        getConfiguredLevelWeights(),
-        getConfiguredProjectCredits(),
-      ]);
+      const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const assessmentScore = computeAssessmentScore(newType, newProjects, newLevel, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(current.technology_id);
 
@@ -434,7 +258,7 @@ export const assessmentService = {
 
       logger.info({ assessmentId: id, approvedByEmployeeId }, 'Skill assessment approved');
 
-      await recomputeScoresForEmployee(assessment.employee_id);
+      await scoreRecalculationService.recomputeScoresForEmployee(assessment.employee_id);
 
       const [emp, assessor] = await Promise.all([
         db.employee.findUnique({ where: { id: assessment.employee_id }, select: { emp_code: true } }),
@@ -500,7 +324,7 @@ export const assessmentService = {
     try {
       if (employeeIds.length === 0) return [];
 
-      const pendingStatus = await getConfiguredStatusCode(
+      const pendingStatus = await scoringConfigService.getConfiguredStatusCode(
         'pending',
         { counts_toward_score: false, is_terminal: false },
         'pending',
@@ -589,7 +413,7 @@ export const assessmentService = {
       logger.info({ assessmentId: id }, 'Skill assessment deleted');
 
       // Recompute scores after deletion
-      await recomputeScoresForEmployee(assessment.employee_id);
+      await scoreRecalculationService.recomputeScoresForEmployee(assessment.employee_id);
     } catch (error) {
       logger.error({ error, id }, 'Failed to delete skill assessment');
       throw error;

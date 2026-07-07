@@ -1,3 +1,8 @@
+import {
+  COMPETENCY_STAR_RATING_BANDS,
+  scoreToStarRatingBand,
+} from './star-rating';
+
 export interface ScoringValues {
   primary: number;
   secondary: number;
@@ -69,12 +74,7 @@ export function computeAssessmentScore(
 }
 
 export function scoreToStarRating(score: number): number {
-  if (score <= 0) return 1;
-  if (score < 0.20) return 1;
-  if (score < 0.40) return 2;
-  if (score < 0.65) return 3;
-  if (score < 0.95) return 4;
-  return 5;
+  return scoreToStarRatingBand(score, COMPETENCY_STAR_RATING_BANDS);
 }
 
 export function scoreToLevelLabel(score: number): string {
