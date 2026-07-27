@@ -1,15 +1,4 @@
-CREATE TABLE "assessment_type_configs" (
-  "id" SERIAL NOT NULL,
-  "code" TEXT NOT NULL,
-  "label" TEXT NOT NULL,
-  "weight" DOUBLE PRECISION NOT NULL DEFAULT 0,
-  "description" TEXT,
-  "sort_order" INTEGER NOT NULL DEFAULT 0,
-  "is_active" BOOLEAN NOT NULL DEFAULT true,
-  "updated_at" TIMESTAMP(3) NOT NULL,
-
-  CONSTRAINT "assessment_type_configs_pkey" PRIMARY KEY ("id")
-);
+-- Table assessment_type_configs already created in previous migration
 
 CREATE TABLE "assessment_level_configs" (
   "id" SERIAL NOT NULL,
@@ -55,7 +44,7 @@ CREATE TABLE "assessment_project_configs" (
   CONSTRAINT "assessment_project_configs_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "assessment_type_configs_code_key" ON "assessment_type_configs"("code");
+-- Index assessment_type_configs_code_key already created in previous migration
 CREATE UNIQUE INDEX "assessment_level_configs_code_key" ON "assessment_level_configs"("code");
 CREATE UNIQUE INDEX "assessment_status_configs_code_key" ON "assessment_status_configs"("code");
 CREATE UNIQUE INDEX "assessment_project_configs_project_count_key" ON "assessment_project_configs"("project_count");

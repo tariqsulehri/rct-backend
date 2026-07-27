@@ -17,16 +17,16 @@ const GRADES = [
   { code: 'G21', title: 'Senior Solution Architect - Cloud and Infrastructure',  level: 9, experience_years: 21, performance_note: 'Above Performer' },
 ];
 
-// ─── Competency Categories (skill type: Technical vs Behavioral) ─────────────
+// ─── Competency Categories (skill type: Technical vs Professional) ────────────
 const COMPETENCY_CATEGORIES = [
   { name: 'Technical',  description: 'Hands-on technical skills and tool proficiency', color: '#3B82F6', weight: 1.0, sort_order: 1, is_active: true },  // blue
-  { name: 'Behavioral', description: 'Soft skills: leadership, communication, mentoring', color: '#8B5CF6', weight: 1.0, sort_order: 2, is_active: true }, // purple
+  { name: 'Professional', description: 'Professional development, functional and delivery skills', color: '#8B5CF6', weight: 1.0, sort_order: 2, is_active: true }, // purple
 ];
 
-// ─── 12 Skill Domains — each with a color for UI visualization ───────────────
+// ─── 14 Skill Domains — each with a color for UI visualization ───────────────
 const SKILL_DOMAINS: {
   name: string;
-  category: 'Technical' | 'Behavioral';
+  category: 'Technical' | 'Professional';
   description: string;
   color: string;
 }[] = [
@@ -42,6 +42,8 @@ const SKILL_DOMAINS: {
   { name: 'DataOps',              category: 'Technical', description: 'Data pipeline engineering, data quality and platform operations',          color: '#14B8A6' }, // teal
   { name: 'AI-Augmented DevOps',  category: 'Technical', description: 'DevOps practices enhanced with AI/ML tooling and workflows',              color: '#6366F1' }, // indigo
   { name: 'Platform Engineering', category: 'Technical', description: 'Internal developer platforms, golden paths and self-service infrastructure', color: '#0EA5E9' }, // sky
+  { name: 'Functional',           category: 'Professional', description: 'Functional domain knowledge and analysis',                   color: '#14B8A6' },
+  { name: 'Delivery',             category: 'Professional', description: 'Project management and delivery coordination',              color: '#6366F1' },
 ];
 
 // ─── Domain-Grade weight matrix (right table from career progression sheet) ──
@@ -62,11 +64,11 @@ const DOMAIN_GRADE_WEIGHTS: Record<string, Record<string, number>> = {
 };
 
 // ─── Competencies with category (skill type) and domains (M-to-M) ────────────
-// category: 'Technical' | 'Behavioral'
+// category: 'Technical' | 'Professional'
 // domains: array of domain names — primary domain first
 const COMPETENCIES: {
   name: string;
-  category: 'Technical' | 'Behavioral';
+  category: 'Technical' | 'Professional';
   description: string;
   is_critical: boolean;
   domains: string[];          // First entry = primary domain
@@ -941,7 +943,7 @@ async function main() {
   console.log(`
 ✅ Seed complete!
    Grades:                ${GRADES.length}
-   Competency Categories: ${COMPETENCY_CATEGORIES.length}  (Technical, Behavioral)
+   Competency Categories: ${COMPETENCY_CATEGORIES.length}  (Technical, Professional)
    Skill Domains:         ${SKILL_DOMAINS.length}  (each with color)
    Organization:          ${organization.name}
    Competencies:          ${COMPETENCIES.length}  (M-to-M domain mappings)

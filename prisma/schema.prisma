@@ -507,7 +507,6 @@ model Employee {
 
   current_grade_id Int
   target_grade_id  Int
-  manager_id       Int?
   department_id    Int?
 
   deleted_at DateTime? // Soft delete
@@ -517,8 +516,6 @@ model Employee {
   organization  Organization @relation(fields: [organization_id], references: [id], onDelete: Restrict)
   current_grade Grade        @relation("CurrentGrade", fields: [current_grade_id], references: [id])
   target_grade  Grade        @relation("TargetGrade", fields: [target_grade_id], references: [id])
-  manager       Employee?    @relation("Reports", fields: [manager_id], references: [id])
-  reports       Employee[]   @relation("Reports")
   dept          Department?  @relation(fields: [department_id], references: [id])
 
   user                     User?
@@ -527,7 +524,6 @@ model Employee {
   competency_scores        CompetencyScore[]
   domain_scores            DomainScore[]
 
-  @@index([manager_id])
   @@index([organization_id])
   @@index([current_grade_id])
   @@index([deleted_at])

@@ -420,38 +420,6 @@ export const assessmentService = {
     }
   },
 
-  async getTeamRoster(managerId: number, department?: string): Promise<TeamMemberResponse[]> {
-    try {
-      const reports = await db.employee.findMany({
-        where: {
-          manager_id: managerId,
-          deleted_at: null,
-          ...(department && { department }),
-        },
-        include: {
-          current_grade: { select: { id: true, code: true, title: true, level: true } },
-          target_grade: { select: { id: true, code: true, title: true, level: true } },
-          skill_assessments: { select: { id: true } },
-        },
-        orderBy: { full_name: 'asc' },
-      });
-
-      return reports.map((emp) => ({
-        id: emp.id,
-        emp_code: emp.emp_code,
-        full_name: emp.full_name,
-        department: emp.department,
-        email: emp.email,
-        current_grade: emp.current_grade,
-        target_grade: emp.target_grade,
-        skill_assessments_count: emp.skill_assessments.length,
-      }));
-    } catch (error) {
-      logger.error({ error, managerId }, 'Failed to fetch team roster');
-      throw error;
-    }
-  },
-
   async getEmployeesByIds(employeeIds: number[], department?: string): Promise<TeamMemberResponse[]> {
     try {
       if (employeeIds.length === 0) return [];

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import logger from '../config/logger';
 import { db } from '../config/database';
 import { PermissionCode, RoleCode } from '../types/rbac';
+import { accessScopeService } from '../modules/access/access-scope.service';
 
 /**
  * Role-based authorization middleware
@@ -124,10 +125,19 @@ export const scopeGuard = () => {
       // Only allow if:
       // 1. Manager accessing their own data
       // 2. Engineer accessing their own data
-      if (req.user.role === 'MANAGER') {
-        // TODO: Check if employeeId is in manager's direct reports
-        // This will be implemented when we add the database check
-        // For now, we'll implement it in Phase 2
+      if (req.user.role === 'MANAGER' || req.user.role === 'LINE_MANAGER' || req.user.role === 'TOP_MANAGEMENT') {
+        const canAccess = await accessScopeService.canAccessEmployee(
+          { id: req.user.id, employeeId: req.user.employeeId, role: req.user.role },
+          employeeId
+        );
+        
+        if (!canAccess) {
+          logger.warn(`User ${req.user.id} (${req.user.role}) attempted to access out-of-scope employee ${employeeId}`);
+          return res.status(403).json({
+            error: 'Access denied to this employee',
+            code: 'SCOPE_VIOLATION',
+          });
+        }
         return next();
       }
 

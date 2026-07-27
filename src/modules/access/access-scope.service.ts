@@ -17,7 +17,7 @@ function activeAssignmentWhere(now = new Date()) {
 
 export const accessScopeService = {
   async getAccessibleEmployeeIds(user: AuthUser, options: { forAssessment?: boolean } = {}): Promise<number[]> {
-    if (user.role === 'ADMIN') {
+    if (user.role === 'ADMIN' || (user.role === 'TOP_MANAGEMENT' && !options.forAssessment)) {
       const employees = await db.employee.findMany({
         where: { deleted_at: null },
         select: { id: true },
@@ -65,24 +65,27 @@ export const accessScopeService = {
     });
     for (const assignment of lineAssignments) ids.add(assignment.employee_id);
 
-    // Transitional fallback: preserve existing manager_id behavior until all
-    // managers are fully maintained through assignment tables.
-    if (user.role === 'MANAGER' || user.role === 'LINE_MANAGER' || user.role === 'TOP_MANAGEMENT') {
-      const legacyReports = await db.employee.findMany({
-        where: {
-          manager_id: user.employeeId,
-          deleted_at: null,
-        },
-        select: { id: true },
+
+    // New Requirement: Manager can see all employees in their own department.
+    if (user.role === 'MANAGER') {
+      const managerEmp = await db.employee.findUnique({
+        where: { id: user.employeeId },
+        select: { department_id: true },
       });
-      for (const employee of legacyReports) ids.add(employee.id);
+      if (managerEmp?.department_id) {
+        const departmentEmployees = await db.employee.findMany({
+          where: { department_id: managerEmp.department_id, deleted_at: null },
+          select: { id: true },
+        });
+        for (const employee of departmentEmployees) ids.add(employee.id);
+      }
     }
 
     return [...ids];
   },
 
   async canAccessEmployee(user: AuthUser, employeeId: number, options: { forAssessment?: boolean } = {}): Promise<boolean> {
-    if (user.role === 'ADMIN') {
+    if (user.role === 'ADMIN' || (user.role === 'TOP_MANAGEMENT' && !options.forAssessment)) {
       const count = await db.employee.count({
         where: { id: employeeId, deleted_at: null },
       });
@@ -121,15 +124,19 @@ export const accessScopeService = {
     });
     if (lineAssignment) return true;
 
-    if (user.role === 'MANAGER' || user.role === 'LINE_MANAGER' || user.role === 'TOP_MANAGEMENT') {
-      const legacyReportCount = await db.employee.count({
-        where: {
-          id: employeeId,
-          manager_id: user.employeeId,
-          deleted_at: null,
-        },
+
+    // New Requirement: Manager can access all employees in their own department.
+    if (user.role === 'MANAGER') {
+      const managerEmp = await db.employee.findUnique({
+        where: { id: user.employeeId },
+        select: { department_id: true },
       });
-      return legacyReportCount > 0;
+      if (managerEmp?.department_id) {
+        const deptEmployeeCount = await db.employee.count({
+          where: { id: employeeId, department_id: managerEmp.department_id, deleted_at: null },
+        });
+        if (deptEmployeeCount > 0) return true;
+      }
     }
 
     return false;

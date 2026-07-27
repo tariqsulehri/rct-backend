@@ -1158,7 +1158,6 @@ export const configService = {
         email: data.email ?? null,
         current_grade_id: data.current_grade_id,
         target_grade_id: data.target_grade_id,
-        manager_id: data.manager_id ?? null,
         department_id: data.department_id ?? null,
       },
     });

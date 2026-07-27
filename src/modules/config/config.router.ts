@@ -65,20 +65,20 @@ router.delete('/access/line-manager-assignments/:id', requirePermission('assignm
 router.get('/access/audit-logs', requirePermission('assignments.manage'), configController.listAccessAuditLogs);
 
 // ── Scoring Config ───────────────────────────────────────────────────────────
-router.get('/assessment-types', requirePermission('config.manage'), configController.listAssessmentTypeConfigs);
+router.get('/assessment-types', requireRole('ADMIN', 'TOP_MANAGEMENT', 'MANAGER', 'LINE_MANAGER', 'ENGINEER'), configController.listAssessmentTypeConfigs);
 router.patch('/assessment-types/:id', requirePermission('config.manage'), validate(updateAssessmentTypeConfigSchema), configController.updateAssessmentTypeConfig);
 
-router.get('/assessment-levels', requirePermission('config.manage'), configController.listAssessmentLevelConfigs);
+router.get('/assessment-levels', requireRole('ADMIN', 'TOP_MANAGEMENT', 'MANAGER', 'LINE_MANAGER', 'ENGINEER'), configController.listAssessmentLevelConfigs);
 router.patch('/assessment-levels/:id', requirePermission('config.manage'), validate(updateAssessmentLevelConfigSchema), configController.updateAssessmentLevelConfig);
 
-router.get('/assessment-statuses', requirePermission('config.manage'), configController.listAssessmentStatusConfigs);
+router.get('/assessment-statuses', requireRole('ADMIN', 'TOP_MANAGEMENT', 'MANAGER', 'LINE_MANAGER', 'ENGINEER'), configController.listAssessmentStatusConfigs);
 router.patch('/assessment-statuses/:id', requirePermission('config.manage'), validate(updateAssessmentStatusConfigSchema), configController.updateAssessmentStatusConfig);
 
-router.get('/assessment-projects', requirePermission('config.manage'), configController.listAssessmentProjectConfigs);
+router.get('/assessment-projects', requireRole('ADMIN', 'TOP_MANAGEMENT', 'MANAGER', 'LINE_MANAGER', 'ENGINEER'), configController.listAssessmentProjectConfigs);
 router.patch('/assessment-projects/:id', requirePermission('config.manage'), validate(updateAssessmentProjectConfigSchema), configController.updateAssessmentProjectConfig);
 
 // ── Departments ──────────────────────────────────────────────────────────────
-router.get('/departments', requirePermission('config.manage'), configController.listDepartments);
+router.get('/departments', requireRole('ADMIN', 'TOP_MANAGEMENT', 'MANAGER', 'LINE_MANAGER', 'ENGINEER'), configController.listDepartments);
 router.post('/departments', requirePermission('config.manage'), validate(createDepartmentSchema), configController.createDepartment);
 router.patch('/departments/:id', requirePermission('config.manage'), validate(updateDepartmentSchema), configController.updateDepartment);
 router.delete('/departments/:id', requirePermission('config.manage'), configController.deleteDepartment);
