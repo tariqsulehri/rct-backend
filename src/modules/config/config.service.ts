@@ -1139,7 +1139,6 @@ export const configService = {
         current_grade: true,
         target_grade: true,
         organization: true,
-        manager: true,
         dept: true,
       },
       orderBy: { full_name: 'asc' },
