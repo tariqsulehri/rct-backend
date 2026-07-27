@@ -360,7 +360,7 @@ export const configController = {
 
   async createEmployee(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await configService.createEmployee(req.body);
+      const result = await configService.createEmployee(req.body, req.user?.id);
       res.status(201).json({ success: true, data: result });
     } catch (error) {
       logger.error({ error }, 'Create employee error');
@@ -370,8 +370,8 @@ export const configController = {
 
   async updateEmployee(req: Request, res: Response, next: NextFunction) {
     try {
-      const id = parseInt(req.params.id);
-      const result = await configService.updateEmployee(id, req.body);
+      const id = parseInt(req.params.id, 10);
+      const result = await configService.updateEmployee(id, req.body, req.user?.id);
       res.json({ success: true, data: result });
     } catch (error) {
       logger.error({ error }, 'Update employee error');

@@ -1140,41 +1140,121 @@ export const configService = {
         target_grade: true,
         organization: true,
         dept: true,
+        line_manager_assignments: {
+          where: { is_active: true, relationship_type: 'LINE_MANAGER' },
+          include: { manager_user: { include: { employee: true } } },
+          take: 1,
+        },
       },
       orderBy: { full_name: 'asc' },
     });
   },
 
-  async createEmployee(data: CreateEmployeeInput) {
+  async createEmployee(data: CreateEmployeeInput, actorUserId?: number) {
     const organizationId = await getDefaultOrganizationId();
     await validateEmployeeGradesForDepartment(data.department_id, data.current_grade_id, data.target_grade_id);
-    return db.employee.create({
-      data: {
-        organization_id: organizationId,
-        emp_code: data.emp_code,
-        full_name: data.full_name,
-        department: data.department,
-        email: data.email ?? null,
-        current_grade_id: data.current_grade_id,
-        target_grade_id: data.target_grade_id,
-        department_id: data.department_id ?? null,
-      },
+    const { manager_user_id, ...rest } = data;
+
+    return db.$transaction(async (tx) => {
+      const emp = await tx.employee.create({
+        data: {
+          organization_id: organizationId,
+          emp_code: rest.emp_code,
+          full_name: rest.full_name,
+          department: rest.department,
+          email: rest.email ?? null,
+          current_grade_id: rest.current_grade_id,
+          target_grade_id: rest.target_grade_id,
+          department_id: rest.department_id ?? null,
+        },
+      });
+
+      if (manager_user_id) {
+        await tx.employeeLineManagerAssignment.create({
+          data: {
+            employee_id: emp.id,
+            manager_user_id,
+            relationship_type: 'LINE_MANAGER',
+            is_active: true,
+            starts_at: new Date(),
+          },
+        });
+        if (actorUserId) {
+          await tx.accessAuditLog.create({
+            data: {
+              actor_user_id: actorUserId,
+              target_user_id: manager_user_id,
+              action: 'LINE_MANAGER_ASSIGNED',
+              entity_type: 'EMPLOYEE',
+              entity_id: emp.id,
+              new_value: manager_user_id,
+            },
+          });
+        }
+      }
+      return emp;
     });
   },
 
-  async updateEmployee(id: number, data: UpdateEmployeeInput) {
+  async updateEmployee(id: number, data: UpdateEmployeeInput, actorUserId?: number) {
     const existing = await db.employee.findUniqueOrThrow({
       where: { id },
       select: { department_id: true, current_grade_id: true, target_grade_id: true },
     });
-    const { department_id, ...rest } = data as any;
+    const { department_id, manager_user_id, ...rest } = data as any;
     const nextDepartmentId = department_id === undefined ? existing.department_id : department_id;
     const nextCurrentGradeId = data.current_grade_id ?? existing.current_grade_id;
     const nextTargetGradeId = data.target_grade_id ?? existing.target_grade_id;
     await validateEmployeeGradesForDepartment(nextDepartmentId, nextCurrentGradeId, nextTargetGradeId);
-    return db.employee.update({
-      where: { id },
-      data: { ...rest, department_id: department_id ?? null },
+    
+    return db.$transaction(async (tx) => {
+      const updated = await tx.employee.update({
+        where: { id },
+        data: { ...rest, department_id: department_id ?? null },
+      });
+
+      if (manager_user_id !== undefined) {
+        const activeAssignment = await tx.employeeLineManagerAssignment.findFirst({
+          where: { employee_id: id, relationship_type: 'LINE_MANAGER', is_active: true },
+        });
+
+        // Only transition if the manager is actually changing
+        if (activeAssignment?.manager_user_id !== manager_user_id) {
+          if (activeAssignment) {
+            await tx.employeeLineManagerAssignment.update({
+              where: { id: activeAssignment.id },
+              data: { is_active: false, ends_at: new Date() },
+            });
+          }
+
+          if (manager_user_id !== null) {
+            await tx.employeeLineManagerAssignment.create({
+              data: {
+                employee_id: id,
+                manager_user_id,
+                relationship_type: 'LINE_MANAGER',
+                is_active: true,
+                starts_at: new Date(),
+              },
+            });
+            
+            if (actorUserId) {
+              await tx.accessAuditLog.create({
+                data: {
+                  actor_user_id: actorUserId,
+                  target_user_id: manager_user_id,
+                  action: 'LINE_MANAGER_ASSIGNED',
+                  entity_type: 'EMPLOYEE',
+                  entity_id: id,
+                  old_value: activeAssignment?.manager_user_id,
+                  new_value: manager_user_id,
+                },
+              });
+            }
+          }
+        }
+      }
+      return updated;
     });
   },
 

@@ -78,6 +78,7 @@ export const createEmployeeSchema = z.object({
   current_grade_id: z.number().int().positive(),
   target_grade_id: z.number().int().positive(),
   department_id: z.number().int().positive().nullable().optional(),
+  manager_user_id: z.number().int().positive().nullable().optional(),
 });
 export const updateEmployeeSchema = createEmployeeSchema.partial();
 
