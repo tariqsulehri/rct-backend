@@ -1,7 +1,13 @@
 # Development backend image.
 # Runs the TypeScript dev server with full dependencies and Prisma Client.
-FROM cgr.dev/chainguard/node:20-dev
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y curl ca-certificates openssl tzdata && \
+    curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
+    apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies into the container. Source code is mounted by compose.
 COPY package.json package-lock.json* ./
