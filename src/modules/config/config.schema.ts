@@ -79,6 +79,7 @@ export const createEmployeeSchema = z.object({
   target_grade_id: z.number().int().positive(),
   department_id: z.number().int().positive().nullable().optional(),
   manager_user_id: z.number().int().positive().nullable().optional(),
+  is_active: z.boolean().optional(),
 });
 export const updateEmployeeSchema = createEmployeeSchema.partial();
 
@@ -89,6 +90,7 @@ export const createGradeSchema = z.object({
   level: z.number().int().min(1),
   experience_years: z.number().int().min(0),
   performance_note: z.string().optional(),
+  is_active: z.boolean().optional(),
 });
 export const updateGradeSchema = createGradeSchema.partial();
 
@@ -97,6 +99,7 @@ export const createSkillDomainSchema = z.object({
   description: z.string().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   category_id: z.number().int().positive(),
+  is_active: z.boolean().optional(),
 });
 export const updateSkillDomainSchema = createSkillDomainSchema.partial();
 
@@ -107,6 +110,7 @@ export const createCompetencySchema = z.object({
   category_id: z.number().int().positive().optional(),
   department_id: z.number().int().positive().optional(),
   domain_ids: z.array(z.number().int().positive()).min(1),
+  is_active: z.boolean().optional(),
 });
 export const updateCompetencySchema = createCompetencySchema.partial();
 
@@ -123,6 +127,7 @@ export const syncDepartmentSkillMapSchema = z.object({
 export const createTechnologySchema = z.object({
   name: z.string().min(1).max(100),
   competency_id: z.number().int().positive(),
+  is_active: z.boolean().optional(),
 });
 export const updateTechnologySchema = createTechnologySchema.partial();
 
@@ -205,6 +210,7 @@ export type UpdateCompetencyCategoryInput = z.infer<typeof updateCompetencyCateg
 export const createDepartmentSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().optional(),
+  is_active: z.boolean().optional(),
 });
 export const updateDepartmentSchema = createDepartmentSchema.partial();
 

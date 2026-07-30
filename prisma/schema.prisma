@@ -22,6 +22,7 @@ model Grade {
   level            Int
   experience_years Int
   performance_note String?
+  is_active        Boolean @default(true)
 
   department           Department               @relation(fields: [department_id], references: [id], onDelete: Cascade)
   employees_current    Employee[]               @relation("CurrentGrade")
@@ -32,6 +33,7 @@ model Grade {
   @@unique([department_id, code])
   @@index([department_id])
   @@index([level])
+  @@index([is_active])
   @@map("grades")
 }
 
@@ -41,6 +43,7 @@ model SkillDomain {
   description String?
   color       String? // Hex color for UI badges/visualization (e.g. '#3B82F6')
   category_id Int
+  is_active   Boolean @default(true)
 
   domain_scores      DomainScore[]
   department_weights DepartmentDomainWeight[]
@@ -50,6 +53,7 @@ model SkillDomain {
   category           CompetencyCategory       @relation(fields: [category_id], references: [id], onDelete: Restrict)
 
   @@index([category_id])
+  @@index([is_active])
   @@map("skill_domains")
 }
 
@@ -110,6 +114,7 @@ model Competency {
   name        String  @unique
   description String
   is_critical Boolean @default(false)
+  is_active   Boolean @default(true)
 
   // Categorization
   category_id         Int
@@ -125,6 +130,7 @@ model Competency {
   skill_assessments SkillAssessment[]
 
   @@index([category_id])
+  @@index([is_active])
   @@map("competencies")
 }
 
@@ -142,15 +148,17 @@ model CompetencyLevel {
 }
 
 model Technology {
-  id            Int    @id @default(autoincrement())
+  id            Int     @id @default(autoincrement())
   name          String
   competency_id Int
+  is_active     Boolean @default(true)
 
   competency        Competency        @relation(fields: [competency_id], references: [id], onDelete: Cascade)
   skill_assessments SkillAssessment[]
 
   @@unique([name, competency_id]) // duplicate guard: same name cannot appear twice under same competency
   @@index([competency_id])
+  @@index([is_active])
   @@map("technologies")
 }
 
@@ -216,6 +224,7 @@ model Department {
   organization_id Int
   name            String
   description     String?
+  is_active       Boolean  @default(true)
   created_at      DateTime @default(now())
 
   organization           Organization               @relation(fields: [organization_id], references: [id], onDelete: Restrict)
@@ -231,6 +240,7 @@ model Department {
 
   @@unique([organization_id, name])
   @@index([organization_id])
+  @@index([is_active])
   @@map("departments")
 }
 
@@ -240,12 +250,14 @@ model Organization {
   slug       String   @unique
   logo_url   String?
   base_url   String?
+  is_active  Boolean  @default(true)
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   departments Department[]
   employees   Employee[]
 
+  @@index([is_active])
   @@map("organizations")
 }
 
@@ -509,6 +521,7 @@ model Employee {
   target_grade_id  Int
   department_id    Int?
 
+  is_active  Boolean   @default(true)
   deleted_at DateTime? // Soft delete
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -527,6 +540,7 @@ model Employee {
   @@index([organization_id])
   @@index([current_grade_id])
   @@index([deleted_at])
+  @@index([is_active])
   @@index([department_id])
   @@map("employees")
 }

@@ -70,8 +70,10 @@ export function createScoreRecalculationService(
     levelWeights = LEVEL_WEIGHT,
     projectCredits = {},
   }: RecomputeOneInput): Promise<RecomputedCompetencyResult> => {
+    const competency = await client.competency.findUnique({ where: { id: competencyId }, select: { is_active: true } });
+
     const technologies = await client.technology.findMany({
-      where: { competency_id: competencyId },
+      where: { competency_id: competencyId, is_active: true },
       select: { id: true },
     });
     const techIds = technologies.map((technology) => technology.id);
@@ -84,7 +86,7 @@ export function createScoreRecalculationService(
       },
     });
 
-    if (assessments.length === 0) {
+    if (assessments.length === 0 || competency?.is_active === false) {
       await client.competencyScore.upsert({
         where: { employee_id_competency_id: { employee_id: employeeId, competency_id: competencyId } },
         create: { employee_id: employeeId, department_id: departmentId, competency_id: competencyId, score: null, level_label: null, star_rating: null },

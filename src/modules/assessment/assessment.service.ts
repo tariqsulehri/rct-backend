@@ -41,10 +41,10 @@ async function getAssessmentReferenceIds(
 ): Promise<{ competencyId: number | null; domainId: number | null }> {
   const technology = await db.technology.findUnique({
     where: { id: technologyId },
-    select: { competency_id: true },
+    select: { competency_id: true, is_active: true },
   });
 
-  if (!technology) return { competencyId: null, domainId: null };
+  if (!technology || technology.is_active === false) return { competencyId: null, domainId: null };
 
   const domainMap = await db.competencyDomainMap.findFirst({
     where: { competency_id: technology.competency_id },
@@ -427,7 +427,8 @@ export const assessmentService = {
         where: {
           id: { in: employeeIds },
           deleted_at: null,
-          ...(department && { department }),
+          is_active: true,
+          ...(department ? { department } : {}),
         },
         include: {
           current_grade: { select: { id: true, code: true, title: true, level: true } },
@@ -456,7 +457,11 @@ export const assessmentService = {
   async getAllEmployees(department?: string): Promise<TeamMemberResponse[]> {
     try {
       const employees = await db.employee.findMany({
-        where: { deleted_at: null, ...(department && { department }) },
+        where: {
+          deleted_at: null,
+          is_active: true,
+          ...(department ? { department } : {}),
+        },
         include: {
           current_grade: { select: { id: true, code: true, title: true, level: true } },
           target_grade: { select: { id: true, code: true, title: true, level: true } },
