@@ -1,3 +1,4 @@
+import { describe, it, expect, jest } from '@jest/globals';
 import type { PrismaClient } from '@prisma/client';
 import { DEFAULT_SCORING_VALUES, LEVEL_WEIGHT } from './scoring.engine';
 import {
@@ -95,7 +96,9 @@ describe('score recalculation service', () => {
 
   it('recomputes assessed and existing score competencies for an employee', async () => {
     const client = createMockClient();
-    const configReader = { getScoringConfigBundle: jest.fn().mockResolvedValue(scoringConfig) };
+    const configReader = {
+      getScoringConfigBundle: jest.fn<() => Promise<ScoringConfigBundle>>().mockResolvedValue(scoringConfig),
+    };
     jest.mocked(client.employee.findUnique).mockResolvedValue({ department_id: 7 } as never);
     jest.mocked(client.skillAssessment.findMany)
       .mockResolvedValueOnce([{ technology: { competency_id: 100 } }] as never)
