@@ -15,6 +15,7 @@ const scoringConfig: ScoringConfigBundle = {
 function createMockClient() {
   return {
     employee: { findUnique: jest.fn() },
+    competency: { findUnique: jest.fn() },
     skillAssessment: { findMany: jest.fn() },
     technology: { findMany: jest.fn() },
     competencyScore: {
