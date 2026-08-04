@@ -1,3 +1,4 @@
+import { describe, it, expect } from '@jest/globals';
 import { changePasswordSchema, loginSchema } from './auth.schema';
 
 describe('auth schema', () => {
