@@ -5,7 +5,7 @@ import { prisma } from '../../config/database';
 import { generateAccessToken, generateRefreshToken } from '../../middleware/authenticate';
 import logger from '../../config/logger';
 import env from '../../config/env';
-import { LoginRequest, LoginResponse } from './auth.schema';
+import { ChangePasswordRequest, LoginRequest, LoginResponse } from './auth.schema';
 
 type LoginResult = LoginResponse & { refreshToken: string };
 type CurrentUserResult = LoginResponse['user'];
@@ -257,5 +257,44 @@ export const authService = {
     });
 
     logger.info(`User ${userId} logged out`);
+  },
+
+  async changePassword(userId: number, request: ChangePasswordRequest): Promise<{ success: boolean; message: string }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.is_active) {
+      throw {
+        statusCode: 401,
+        code: 'USER_NOT_FOUND',
+        message: 'User not found or inactive',
+      };
+    }
+
+    const isCurrentPasswordValid = await bcryptjs.compare(request.currentPassword, user.password_hash);
+    if (!isCurrentPasswordValid) {
+      throw {
+        statusCode: 400,
+        code: 'INVALID_CURRENT_PASSWORD',
+        message: 'The current password you entered is incorrect.',
+      };
+    }
+
+    const hashedNewPassword = await bcryptjs.hash(request.newPassword, 12);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        password_hash: hashedNewPassword,
+      },
+    });
+
+    logger.info(`User ${userId} successfully changed their password`);
+
+    return {
+      success: true,
+      message: 'Password changed successfully',
+    };
   },
 };

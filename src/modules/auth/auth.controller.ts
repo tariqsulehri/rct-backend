@@ -123,4 +123,30 @@ export const authController = {
       });
     }
   },
+
+  async changePassword(req: Request, res: Response) {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          error: 'User not authenticated',
+          code: 'NOT_AUTHENTICATED',
+        });
+        return;
+      }
+
+      const result = await authService.changePassword(req.user.id, req.body);
+      res.status(200).json(result);
+    } catch (error: any) {
+      const statusCode = error.statusCode || 500;
+      const code = error.code || 'CHANGE_PASSWORD_ERROR';
+      const message = error.message || 'Failed to change password';
+
+      logger.warn(`Change password failed for user ${req.user?.id}: ${code}`);
+      res.status(statusCode).json({
+        error: message,
+        code,
+      });
+    }
+  },
 };
+

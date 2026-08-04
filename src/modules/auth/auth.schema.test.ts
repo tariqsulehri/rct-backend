@@ -1,4 +1,4 @@
-import { loginSchema } from './auth.schema';
+import { changePasswordSchema, loginSchema } from './auth.schema';
 
 describe('auth schema', () => {
   it('accepts valid login credentials', () => {
@@ -18,5 +18,24 @@ describe('auth schema', () => {
 
     expect(result.success).toBe(false);
   });
+
+  it('accepts valid change password payload', () => {
+    const result = changePasswordSchema.safeParse({
+      currentPassword: 'oldPassword123',
+      newPassword: 'newPassword123',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid change password payload when new password is too short', () => {
+    const result = changePasswordSchema.safeParse({
+      currentPassword: 'oldPassword123',
+      newPassword: 'short',
+    });
+
+    expect(result.success).toBe(false);
+  });
 });
+
 

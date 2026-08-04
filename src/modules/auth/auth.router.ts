@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { authController } from './auth.controller';
 import { authenticate } from '../../middleware/authenticate';
 import { validate } from '../../middleware/validate';
-import { loginSchema } from './auth.schema';
+import { changePasswordSchema, loginSchema } from './auth.schema';
 
 const router: Router = express.Router();
 
@@ -35,9 +35,16 @@ router.post('/refresh', authController.refresh);
 router.get('/me', authenticate, authController.me);
 
 /**
+ * POST /api/v1/auth/change-password
+ * Change password for currently authenticated user
+ */
+router.post('/change-password', authenticate, validate(changePasswordSchema), authController.changePassword);
+
+/**
  * POST /api/v1/auth/logout
  * Logout - revoke refresh token and clear cookie
  */
 router.post('/logout', authenticate, authController.logout);
 
 export default router;
+
