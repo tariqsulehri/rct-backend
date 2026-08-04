@@ -1,7 +1,7 @@
 # Production backend image.
 # Stage 1 installs production-only dependencies. Keeping this separate lets the
 # runtime image avoid dev dependencies while still reusing Docker cache.
-FROM ubuntu:24.04 AS prod-deps
+FROM --platform=linux/amd64 ubuntu:24.04 AS prod-deps
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 WORKDIR /build
@@ -12,7 +12,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
 # Stage 2 installs full dependencies, generates Prisma Client, and compiles TS.
-FROM ubuntu:24.04 AS builder
+FROM --platform=linux/amd64 ubuntu:24.04 AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 WORKDIR /build
@@ -28,7 +28,7 @@ RUN npx prisma generate && npm run build
 
 # Stage 3 is the runtime image. It contains compiled JS, Prisma Client, Prisma
 # schema/migrations, and production node_modules.
-FROM ubuntu:24.04 AS runner
+FROM --platform=linux/amd64 ubuntu:24.04 AS runner
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 WORKDIR /app
