@@ -3,6 +3,8 @@ import {
   bulkUpsertDomainWeightsSchema,
   createUserSchema,
   upsertDepartmentConfigSchema,
+  createAppraisalPeriodSchema,
+  updateAppraisalPeriodSchema,
 } from './config.schema';
 
 describe('config schemas', () => {
@@ -59,4 +61,46 @@ describe('config schemas', () => {
 
     expect(result.success).toBe(true);
   });
+
+  describe('appraisal period schemas', () => {
+    it('accepts valid appraisal period creation payloads', () => {
+      const result = createAppraisalPeriodSchema.safeParse({
+        code: 'CY2026',
+        name: '2026 Annual Career Evaluation',
+        period_type: 'ANNUAL',
+        calendar_year: 2026,
+        start_date: '2026-01-01T00:00:00Z',
+        end_date: '2026-10-31T23:59:59Z',
+        status: 'OPEN',
+        is_active: true,
+        allow_self_submission: true,
+        auto_rollover_skills: true,
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects invalid status or invalid year', () => {
+      const result = createAppraisalPeriodSchema.safeParse({
+        code: 'CY2026',
+        name: '2026 Annual Career Evaluation',
+        calendar_year: 1990, // below 2000
+        start_date: '2026-01-01',
+        end_date: '2026-10-31',
+        status: 'INVALID_STATUS',
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts partial update payloads', () => {
+      const result = updateAppraisalPeriodSchema.safeParse({
+        status: 'LOCKED',
+        is_active: false,
+      });
+
+      expect(result.success).toBe(true);
+    });
+  });
 });
+

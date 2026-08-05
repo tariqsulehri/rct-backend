@@ -824,22 +824,6 @@ async function main() {
     console.log(`  ✅ ${emp.code}: ${emp.name} (${emp.current} → ${emp.target})`);
   }
 
-  // Manager relationships: G17+ are managers
-  const seniorCodes = new Set(['1818', '2166', '1139', '1363', '1392']);
-  const managerId1 = employeeMap['2166']; // Tamoor Ahmad G17 - manages G13-G15
-  const managerId2 = employeeMap['1818']; // Abu Bakar Riaz G17 - manages G15-G16
-  if (managerId1 && managerId2) {
-    for (const emp of EMPLOYEES) {
-      if (seniorCodes.has(emp.code)) continue;
-      if (!employeeMap[emp.code]) continue;
-      const mgr = ['G13', 'G14'].includes(emp.current) ? managerId1 : managerId2;
-      await prisma.employee.update({ where: { id: employeeMap[emp.code] }, data: { manager_id: mgr } });
-    }
-    if (employeeMap['1392'] && employeeMap['1139']) {
-      await prisma.employee.update({ where: { id: employeeMap['1392'] }, data: { manager_id: employeeMap['1139'] } });
-    }
-  }
-
   // 9. Grade Matrix
   console.log('\n📐 Grade-Competency Matrix...');
   const matrixGrades = ['G13', 'G14', 'G15', 'G16'];
@@ -940,6 +924,59 @@ async function main() {
     console.log(`  ✅ ${u.username} (${u.label})`);
   }
 
+  // ── 9. Appraisal Periods (Multi-Year Configuration) ──────────────────────────
+  console.log('\n📅 Seeding Appraisal Periods...');
+  const APPRAISAL_PERIODS = [
+    {
+      code: 'CY2024',
+      name: '2024 Annual Performance Review',
+      period_type: 'ANNUAL',
+      calendar_year: 2024,
+      start_date: new Date('2024-01-01T00:00:00Z'),
+      end_date: new Date('2024-10-31T23:59:59Z'),
+      grace_period_end: new Date('2024-11-15T23:59:59Z'),
+      status: 'ARCHIVED',
+      is_active: false,
+      allow_self_submission: false,
+      auto_rollover_skills: true,
+    },
+    {
+      code: 'CY2025',
+      name: '2025 Annual Performance Review',
+      period_type: 'ANNUAL',
+      calendar_year: 2025,
+      start_date: new Date('2025-01-01T00:00:00Z'),
+      end_date: new Date('2025-10-31T23:59:59Z'),
+      grace_period_end: new Date('2025-11-15T23:59:59Z'),
+      status: 'LOCKED',
+      is_active: false,
+      allow_self_submission: false,
+      auto_rollover_skills: true,
+    },
+    {
+      code: 'CY2026',
+      name: '2026 Annual Career Evaluation',
+      period_type: 'ANNUAL',
+      calendar_year: 2026,
+      start_date: new Date('2026-01-01T00:00:00Z'),
+      end_date: new Date('2026-10-31T23:59:59Z'),
+      grace_period_end: new Date('2026-11-15T23:59:59Z'),
+      status: 'OPEN',
+      is_active: true,
+      allow_self_submission: true,
+      auto_rollover_skills: true,
+    },
+  ];
+
+  for (const period of APPRAISAL_PERIODS) {
+    await prisma.appraisalPeriod.upsert({
+      where: { code: period.code },
+      update: period,
+      create: period,
+    });
+    console.log(`  ✅ ${period.code} (${period.name}) - [${period.status}]`);
+  }
+
   console.log(`
 ✅ Seed complete!
    Grades:                ${GRADES.length}
@@ -950,6 +987,7 @@ async function main() {
    Technologies:          ${totalTech}
    Employees:             ${EMPLOYEES.length}
    Users:                 4  (password: password123)
+   Appraisal Periods:     ${APPRAISAL_PERIODS.length}  (CY2024, CY2025, CY2026)
   `);
 }
 

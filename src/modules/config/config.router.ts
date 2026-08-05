@@ -37,6 +37,8 @@ import {
   updateLineManagerAssignmentSchema,
   syncLineManagerAssignmentsSchema,
   updateRolePermissionsSchema,
+  createAppraisalPeriodSchema,
+  updateAppraisalPeriodSchema,
 } from './config.schema';
 
 const router = Router();
@@ -142,4 +144,12 @@ router.post('/competency-categories', requirePermission('config.manage'), valida
 router.patch('/competency-categories/:id', requirePermission('config.manage'), validate(updateCompetencyCategorySchema), configController.updateCompetencyCategory);
 router.delete('/competency-categories/:id', requirePermission('config.manage'), configController.deleteCompetencyCategory);
 
+// ── Appraisal Periods (Multi-Year Configuration) ──────────────────────────
+router.get('/appraisal-periods', requireRole('ADMIN', 'TOP_MANAGEMENT', 'MANAGER', 'LINE_MANAGER', 'ENGINEER'), configController.listAppraisalPeriods);
+router.get('/appraisal-periods/:id', requireRole('ADMIN', 'TOP_MANAGEMENT', 'MANAGER', 'LINE_MANAGER', 'ENGINEER'), configController.getAppraisalPeriod);
+router.post('/appraisal-periods', requirePermission('config.manage'), validate(createAppraisalPeriodSchema), configController.createAppraisalPeriod);
+router.patch('/appraisal-periods/:id', requirePermission('config.manage'), validate(updateAppraisalPeriodSchema), configController.updateAppraisalPeriod);
+router.delete('/appraisal-periods/:id', requirePermission('config.manage'), configController.deleteAppraisalPeriod);
+
 export default router;
+

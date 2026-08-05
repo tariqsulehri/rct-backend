@@ -34,6 +34,9 @@ import {
   UpsertCompetencyGradeThresholdInput,
   BulkUpsertCompetencyGradeThresholdsInput,
   UpdateRolePermissionsInput,
+  CreateAppraisalPeriodInput,
+  UpdateAppraisalPeriodInput,
+  AppraisalPeriodQueryInput,
 } from './config.schema';
 import { PermissionCode, RoleCode } from '../../types/rbac';
 
@@ -1500,4 +1503,74 @@ export const configService = {
   async deleteTechnology(id: number) {
     return db.technology.delete({ where: { id } });
   },
+
+  // ── Appraisal Periods (Multi-Year Configuration) ──────────────────────────
+  async listAppraisalPeriods(query?: AppraisalPeriodQueryInput) {
+    const where: any = {};
+    if (query?.year) where.calendar_year = query.year;
+    if (query?.status) where.status = query.status;
+    if (query?.type) where.period_type = query.type;
+
+    return db.appraisalPeriod.findMany({
+      where,
+      orderBy: [
+        { calendar_year: 'desc' },
+        { start_date: 'desc' },
+      ],
+    });
+  },
+
+  async getAppraisalPeriodById(id: number) {
+    return db.appraisalPeriod.findUnique({ where: { id } });
+  },
+
+  async createAppraisalPeriod(data: CreateAppraisalPeriodInput) {
+    if (data.is_active) {
+      await db.appraisalPeriod.updateMany({
+        data: { is_active: false },
+      });
+    }
+
+    return db.appraisalPeriod.create({
+      data: {
+        code:                  data.code,
+        name:                  data.name,
+        period_type:           data.period_type,
+        calendar_year:         data.calendar_year,
+        start_date:            new Date(data.start_date),
+        end_date:              new Date(data.end_date),
+        grace_period_end:      data.grace_period_end ? new Date(data.grace_period_end) : null,
+        status:                data.status,
+        is_active:             data.is_active ?? false,
+        allow_self_submission: data.allow_self_submission ?? true,
+        auto_rollover_skills:  data.auto_rollover_skills ?? true,
+      },
+    });
+  },
+
+  async updateAppraisalPeriod(id: number, data: UpdateAppraisalPeriodInput) {
+    if (data.is_active === true) {
+      await db.appraisalPeriod.updateMany({
+        where: { id: { not: id } },
+        data: { is_active: false },
+      });
+    }
+
+    const updateData: any = { ...data };
+    if (data.start_date) updateData.start_date = new Date(data.start_date);
+    if (data.end_date) updateData.end_date = new Date(data.end_date);
+    if (data.grace_period_end !== undefined) {
+      updateData.grace_period_end = data.grace_period_end ? new Date(data.grace_period_end) : null;
+    }
+
+    return db.appraisalPeriod.update({
+      where: { id },
+      data: updateData,
+    });
+  },
+
+  async deleteAppraisalPeriod(id: number) {
+    return db.appraisalPeriod.delete({ where: { id } });
+  },
 };
+

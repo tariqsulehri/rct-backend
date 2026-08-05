@@ -635,4 +635,63 @@ export const configController = {
       next(error);
     }
   },
+
+  // ── Appraisal Periods (Multi-Year Configuration) ──────────────────────────
+  async listAppraisalPeriods(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.listAppraisalPeriods(req.query as any);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'List appraisal periods error');
+      next(error);
+    }
+  },
+
+  async getAppraisalPeriod(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id);
+      const result = await configService.getAppraisalPeriodById(id);
+      if (!result) {
+        res.status(404).json({ success: false, message: 'Appraisal period not found' });
+        return;
+      }
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Get appraisal period error');
+      next(error);
+    }
+  },
+
+  async createAppraisalPeriod(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await configService.createAppraisalPeriod(req.body);
+      res.status(201).json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Create appraisal period error');
+      next(error);
+    }
+  },
+
+  async updateAppraisalPeriod(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id);
+      const result = await configService.updateAppraisalPeriod(id, req.body);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Update appraisal period error');
+      next(error);
+    }
+  },
+
+  async deleteAppraisalPeriod(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = parseInt(req.params.id);
+      await configService.deleteAppraisalPeriod(id);
+      res.json({ success: true });
+    } catch (error) {
+      logger.error({ error }, 'Delete appraisal period error');
+      next(error);
+    }
+  },
 };
+

@@ -621,3 +621,31 @@ model DomainScore {
   @@index([employee_id])
   @@map("domain_scores")
 }
+
+// ============================================================================
+// APPRAISAL PERIODS & MULTI-YEAR CONFIGURATION
+// ============================================================================
+
+model AppraisalPeriod {
+  id                    Int       @id @default(autoincrement())
+  code                  String    @unique // e.g. "CY2024", "CY2025", "CY2026", "FY2025-H1"
+  name                  String    // "2026 Annual Performance Review"
+  period_type           String    @default("ANNUAL") // "ANNUAL" | "BIANNUAL" | "QUARTERLY" | "CUSTOM"
+  calendar_year         Int       @default(2026)
+  start_date            DateTime
+  end_date              DateTime
+  grace_period_end      DateTime?
+  status                String    @default("DRAFT") // "DRAFT" | "OPEN" | "LOCKED" | "ARCHIVED"
+  is_active             Boolean   @default(false)   // Active period for live submissions
+  allow_self_submission Boolean   @default(true)
+  auto_rollover_skills  Boolean   @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([calendar_year])
+  @@index([status])
+  @@index([is_active])
+  @@map("appraisal_periods")
+}
+

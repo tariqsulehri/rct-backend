@@ -264,3 +264,31 @@ export const bulkUpsertCompetencyGradeThresholdsSchema = z.object({
 
 export type UpsertCompetencyGradeThresholdInput = z.infer<typeof upsertCompetencyGradeThresholdSchema>;
 export type BulkUpsertCompetencyGradeThresholdsInput = z.infer<typeof bulkUpsertCompetencyGradeThresholdsSchema>;
+
+// Appraisal Periods (Multi-Year Configuration)
+export const createAppraisalPeriodSchema = z.object({
+  code:                  z.string().min(2).max(50),
+  name:                  z.string().min(2).max(100),
+  period_type:           z.enum(['ANNUAL', 'BIANNUAL', 'QUARTERLY', 'CUSTOM']).default('ANNUAL'),
+  calendar_year:         z.number().int().min(2000).max(2100),
+  start_date:            z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)),
+  end_date:              z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)),
+  grace_period_end:      z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)).nullable().optional(),
+  status:                z.enum(['DRAFT', 'OPEN', 'LOCKED', 'ARCHIVED']).default('DRAFT'),
+  is_active:             z.boolean().default(false),
+  allow_self_submission: z.boolean().default(true),
+  auto_rollover_skills:  z.boolean().default(true),
+});
+
+export const updateAppraisalPeriodSchema = createAppraisalPeriodSchema.partial();
+
+export const appraisalPeriodQuerySchema = z.object({
+  year:   z.coerce.number().int().optional(),
+  status: z.enum(['DRAFT', 'OPEN', 'LOCKED', 'ARCHIVED']).optional(),
+  type:   z.enum(['ANNUAL', 'BIANNUAL', 'QUARTERLY', 'CUSTOM']).optional(),
+});
+
+export type CreateAppraisalPeriodInput = z.infer<typeof createAppraisalPeriodSchema>;
+export type UpdateAppraisalPeriodInput = z.infer<typeof updateAppraisalPeriodSchema>;
+export type AppraisalPeriodQueryInput = z.infer<typeof appraisalPeriodQuerySchema>;
+
