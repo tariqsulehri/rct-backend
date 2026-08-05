@@ -66,12 +66,15 @@ jobs:
           case "${GITHUB_REF_NAME}" in
             dev)
               ENV_TAG="dev"
+              EXTRA_TAGS=""
               ;;
             stagging)
               ENV_TAG="stagging"
+              EXTRA_TAGS=""
               ;;
             master)
               ENV_TAG="production"
+              EXTRA_TAGS=",${IMAGE_NAME}:latest"
               ;;
             *)
               echo "Unsupported branch: ${GITHUB_REF_NAME}" >&2
@@ -83,7 +86,7 @@ jobs:
           {
             echo "env_tag=${ENV_TAG}"
             echo "sha_tag=${ENV_TAG}-${SHORT_SHA}"
-            echo "tags=${IMAGE_NAME}:${ENV_TAG},${IMAGE_NAME}:${ENV_TAG}-${SHORT_SHA}"
+            echo "tags=${IMAGE_NAME}:${ENV_TAG},${IMAGE_NAME}:${ENV_TAG}-${SHORT_SHA}${EXTRA_TAGS}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Setup Docker Buildx
