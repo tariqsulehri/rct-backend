@@ -3,6 +3,7 @@ import {
   approveSkillAssessmentSchema,
   createSkillAssessmentSchema,
   updateSkillAssessmentSchema,
+  submitDraftsSchema,
 } from './assessment.schema';
 
 describe('assessment schemas', () => {
@@ -55,6 +56,32 @@ describe('assessment schemas', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it('accepts valid status values in create and update schemas', () => {
+    const draftCreate = createSkillAssessmentSchema.safeParse({
+      employee_id: '1818',
+      technology_id: 1,
+      type: 'Primary',
+      projects: 2,
+      status: 'draft',
+    });
+    expect(draftCreate.success).toBe(true);
+
+    const updateStatus = updateSkillAssessmentSchema.safeParse({
+      status: 'pending',
+    });
+    expect(updateStatus.success).toBe(true);
+  });
+
+  it('validates submitDraftsSchema', () => {
+    const emptySubmit = submitDraftsSchema.safeParse({});
+    expect(emptySubmit.success).toBe(true);
+
+    const specificIdsSubmit = submitDraftsSchema.safeParse({
+      assessment_ids: [1, 2, 3],
+    });
+    expect(specificIdsSubmit.success).toBe(true);
   });
 });
 

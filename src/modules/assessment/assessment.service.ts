@@ -26,9 +26,20 @@ const scoreRecalculationService = createScoreRecalculationService(db, {
 // assessments. Called after every create/update/approval so reports are fresh
 // immediately after assessment changes.
 
-async function getInitialAssessmentStatus(isEngineer: boolean): Promise<string> {
+async function getInitialAssessmentStatus(isEngineer: boolean, requestedStatus?: string): Promise<string> {
+  if (requestedStatus === 'draft') {
+    return scoringConfigService.getConfiguredStatusCode('draft', { counts_toward_score: false, is_terminal: false }, 'draft');
+  }
+  if (requestedStatus === 'pending') {
+    return scoringConfigService.getConfiguredStatusCode('pending', { counts_toward_score: false, is_terminal: false }, 'pending');
+  }
+  if (requestedStatus === 'approved') {
+    return isEngineer
+      ? scoringConfigService.getConfiguredStatusCode('draft', { counts_toward_score: false, is_terminal: false }, 'draft')
+      : scoringConfigService.getConfiguredStatusCode('approved', { counts_toward_score: true, is_terminal: true }, 'approved');
+  }
   return isEngineer
-    ? scoringConfigService.getConfiguredStatusCode('pending', { counts_toward_score: false, is_terminal: false }, 'pending')
+    ? scoringConfigService.getConfiguredStatusCode('draft', { counts_toward_score: false, is_terminal: false }, 'draft')
     : scoringConfigService.getConfiguredStatusCode('approved', { counts_toward_score: true, is_terminal: true }, 'approved');
 }
 
@@ -81,7 +92,7 @@ export const assessmentService = {
       const empInternalId = employee.id;
 
       const isEngineer = role === 'ENGINEER';
-      const status = await getInitialAssessmentStatus(isEngineer);
+      const status = await getInitialAssessmentStatus(isEngineer, request.status);
 
       const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const level = request.level ?? 'Unset';
@@ -116,6 +127,7 @@ export const assessmentService = {
           projects: request.projects,
           level,
           score: assessmentScore,
+          status: request.status ? (request.status === 'approved' && isEngineer ? undefined : request.status) : undefined,
           assessed_by: assessedByEmployeeId,
         },
       });
@@ -191,6 +203,7 @@ export const assessmentService = {
           projects: newProjects,
           level: newLevel,
           score: assessmentScore,
+          status: request.status ?? undefined,
           assessed_by: assessedByEmployeeId,
         },
       });
@@ -279,6 +292,82 @@ export const assessmentService = {
       };
     } catch (error) {
       logger.error({ error, id }, 'Failed to approve skill assessment');
+      throw error;
+    }
+  },
+
+  async submitDraftAssessments(
+    empCode: string,
+    submittedByEmployeeId: number,
+    assessmentIds?: number[],
+  ): Promise<{ count: number; data: SkillAssessmentResponse[] }> {
+    try {
+      const employee = await db.employee.findUnique({ where: { emp_code: empCode } });
+      if (!employee) throw Object.assign(new Error(`Employee emp_code '${empCode}' not found`), { statusCode: 404 });
+
+      const pendingStatus = await scoringConfigService.getConfiguredStatusCode(
+        'pending',
+        { counts_toward_score: false, is_terminal: false },
+        'pending',
+      );
+
+      const whereClause: any = {
+        employee_id: employee.id,
+        status: 'draft',
+      };
+
+      if (assessmentIds && assessmentIds.length > 0) {
+        whereClause.id = { in: assessmentIds };
+      }
+
+      const drafts = await db.skillAssessment.findMany({
+        where: whereClause,
+      });
+
+      if (drafts.length === 0) {
+        return { count: 0, data: [] };
+      }
+
+      await db.skillAssessment.updateMany({
+        where: {
+          id: { in: drafts.map((d) => d.id) },
+        },
+        data: {
+          status: pendingStatus,
+          assessed_by: submittedByEmployeeId,
+          updated_at: new Date(),
+        },
+      });
+
+      logger.info({ empCode, submittedCount: drafts.length }, 'Submitted draft skill assessments for approval');
+
+      const updated = await db.skillAssessment.findMany({
+        where: { id: { in: drafts.map((d) => d.id) } },
+      });
+
+      const assessorIds = [...new Set(updated.map((a) => a.assessed_by))];
+      const assessors = await db.employee.findMany({
+        where: { id: { in: assessorIds } },
+        select: { id: true, emp_code: true },
+      });
+      const assessorMap = new Map(assessors.map((e) => [e.id, e.emp_code]));
+
+      const data: SkillAssessmentResponse[] = updated.map((a) => ({
+        id: a.id,
+        employee_id: empCode,
+        technology_id: a.technology_id,
+        type: a.type,
+        projects: a.projects,
+        level: a.level,
+        status: a.status,
+        assessed_by: assessorMap.get(a.assessed_by) ?? String(a.assessed_by),
+        assessed_at: a.assessed_at.toISOString(),
+        updated_at: a.updated_at.toISOString(),
+      }));
+
+      return { count: drafts.length, data };
+    } catch (error) {
+      logger.error({ error, empCode }, 'Failed to submit draft skill assessments');
       throw error;
     }
   },

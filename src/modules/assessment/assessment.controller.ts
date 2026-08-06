@@ -142,6 +142,33 @@ export const assessmentController = {
     }
   },
 
+  async submitDrafts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const employee = await db.employee.findUnique({
+        where: { emp_code: req.params.empCode },
+        select: { id: true },
+      });
+      if (!employee) {
+        res.status(404).json({ success: false, error: 'Employee not found' });
+        return;
+      }
+      if (!(await canAccessEmployee(req, employee.id))) {
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
+      }
+      const assessmentIds: number[] | undefined = req.body?.assessment_ids;
+      const result = await assessmentService.submitDraftAssessments(
+        req.params.empCode,
+        req.user!.employeeId,
+        assessmentIds,
+      );
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Submit draft assessments error');
+      next(error);
+    }
+  },
+
   async getTeamRoster(req: Request, res: Response, next: NextFunction) {
     try {
       const department = req.query.department as string | undefined;
