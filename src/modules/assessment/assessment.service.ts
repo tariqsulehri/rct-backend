@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { db } from '../../config/database';
 import logger from '../../config/logger';
 import {
@@ -69,6 +70,50 @@ async function getAssessmentReferenceIds(
   };
 }
 
+/**
+ * Enforces business rule: at most one tool of each importance level (Primary, Secondary, Tertiary)
+ * per competency per employee.
+ */
+async function assertUniqueCompetencyImportance(
+  employeeId: number,
+  competencyId: number | null | undefined,
+  type: string,
+  excludeTechnologyId?: number,
+  excludeAssessmentId?: number,
+): Promise<void> {
+  if (!competencyId) return;
+
+  const whereClause: Prisma.SkillAssessmentWhereInput = {
+    employee_id: employeeId,
+    competency_id: competencyId,
+    type,
+  };
+
+  if (excludeTechnologyId) {
+    whereClause.technology_id = { not: excludeTechnologyId };
+  }
+  if (excludeAssessmentId) {
+    whereClause.id = { not: excludeAssessmentId };
+  }
+
+  const existing = await db.skillAssessment.findFirst({
+    where: whereClause,
+    include: {
+      technology: { select: { name: true } },
+      competency: { select: { name: true } },
+    },
+  });
+
+  if (existing) {
+    const techName = existing.technology?.name ?? 'another tool';
+    const compName = existing.competency?.name ?? 'this skill';
+    const error = new Error(
+      `A ${type} tool ('${techName}') is already assigned for '${compName}'. Only one ${type} tool is allowed per competency.`
+    );
+    throw Object.assign(error, { statusCode: 409, code: 'DUPLICATE_IMPORTANCE' });
+  }
+}
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export const assessmentService = {
@@ -98,6 +143,13 @@ export const assessmentService = {
       const level = request.level ?? 'Unset';
       const assessmentScore = computeAssessmentScore(request.type, request.projects, level, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(request.technology_id);
+
+      await assertUniqueCompetencyImportance(
+        empInternalId,
+        refs.competencyId,
+        request.type,
+        request.technology_id,
+      );
 
       const assessment = await db.skillAssessment.upsert({
         where: {
@@ -193,6 +245,14 @@ export const assessmentService = {
       const assessmentScore = computeAssessmentScore(newType, newProjects, newLevel, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(current.technology_id);
 
+      await assertUniqueCompetencyImportance(
+        current.employee_id,
+        refs.competencyId,
+        newType,
+        undefined,
+        id,
+      );
+
       const assessment = await db.skillAssessment.update({
         where: { id },
         data: {
@@ -253,6 +313,14 @@ export const assessmentService = {
       const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const assessmentScore = computeAssessmentScore(newType, newProjects, newLevel, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(current.technology_id);
+
+      await assertUniqueCompetencyImportance(
+        current.employee_id,
+        refs.competencyId,
+        newType,
+        undefined,
+        id,
+      );
 
       const assessment = await db.skillAssessment.update({
         where: { id },

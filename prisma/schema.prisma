@@ -570,6 +570,7 @@ model SkillAssessment {
   technology Technology   @relation(fields: [technology_id], references: [id], onDelete: Cascade)
 
   @@unique([employee_id, technology_id]) // one assessment per employee per technology
+  @@unique([employee_id, competency_id, type]) // max 1 Primary, 1 Secondary, 1 Tertiary per competency per employee
   @@index([employee_id])
   @@index([department_id])
   @@index([domain_id])
@@ -629,14 +630,14 @@ model DomainScore {
 model AppraisalPeriod {
   id                    Int       @id @default(autoincrement())
   code                  String    @unique // e.g. "CY2024", "CY2025", "CY2026", "FY2025-H1"
-  name                  String    // "2026 Annual Performance Review"
+  name                  String // "2026 Annual Performance Review"
   period_type           String    @default("ANNUAL") // "ANNUAL" | "BIANNUAL" | "QUARTERLY" | "CUSTOM"
   calendar_year         Int       @default(2026)
   start_date            DateTime
   end_date              DateTime
   grace_period_end      DateTime?
   status                String    @default("DRAFT") // "DRAFT" | "OPEN" | "LOCKED" | "ARCHIVED"
-  is_active             Boolean   @default(false)   // Active period for live submissions
+  is_active             Boolean   @default(false) // Active period for live submissions
   allow_self_submission Boolean   @default(true)
   auto_rollover_skills  Boolean   @default(true)
 
@@ -648,4 +649,3 @@ model AppraisalPeriod {
   @@index([is_active])
   @@map("appraisal_periods")
 }
-
