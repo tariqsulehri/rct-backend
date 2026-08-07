@@ -19,21 +19,10 @@ router.use(authenticate);
 // Update configuration (Admin only)
 router.put('/config', requireRole('ADMIN'), communicationController.updateConfig);
 
-// Create CEFR communication assessment
+// Create CEFR communication assessment (Line Managers, Admins & Communication Experts)
 router.post(
   '/assessments',
-  requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN', 'ENGINEER', 'TOP_MANAGEMENT'),
-  (req, res, next) => {
-    if (
-      req.user!.role === 'ENGINEER' &&
-      req.body.employee_id !== req.user!.empCode &&
-      req.body.employee_id !== String(req.user!.employeeId)
-    ) {
-      res.status(403).json({ success: false, error: 'You can only create assessments for yourself' });
-      return;
-    }
-    next();
-  },
+  requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN', 'TOP_MANAGEMENT', 'COMMUNICATION_EXPERT', 'LANGUAGE_EXPERT'),
   validate(createCommAssessmentSchema),
   communicationController.createAssessment,
 );

@@ -92,12 +92,12 @@ export const CEFR_BAND_THRESHOLDS: CefrBandThreshold[] = [
 ];
 
 export const CEFR_COMPETENCIES: CefrCompetencyDefinition[] = [
-  { key: 'written_clarity', name: 'Written Clarity', sortOrder: 1 },
-  { key: 'spoken_fluency', name: 'Spoken Fluency & Clarity', sortOrder: 2 },
-  { key: 'presentation', name: 'Presentation & Storytelling', sortOrder: 3 },
-  { key: 'active_listening', name: 'Active Listening & Comprehension', sortOrder: 4 },
-  { key: 'stakeholder_exec', name: 'Stakeholder & Executive', sortOrder: 5 },
-  { key: 'cross_cultural', name: 'Cross-Cultural & Collaborative', sortOrder: 6 },
+  { key: 'written_clarity', name: 'Written Clarity & Documentation', sortOrder: 1 },
+  { key: 'spoken_fluency', name: 'Spoken Fluency & Meeting Presence', sortOrder: 2 },
+  { key: 'presentation', name: 'Technical Presentation & Demos', sortOrder: 3 },
+  { key: 'active_listening', name: 'Active Listening & Feedback Reception', sortOrder: 4 },
+  { key: 'stakeholder_exec', name: 'Stakeholder & Executive Alignment', sortOrder: 5 },
+  { key: 'cross_cultural', name: 'Cross-Cultural & Global Collaboration', sortOrder: 6 },
 ];
 
 export const CEFR_ORG_LEVELS: Record<string, CefrOrgLevelDefinition> = {
