@@ -343,6 +343,12 @@ export class CommunicationService {
       throw new Error(`Communication assessment '${id}' not found`);
     }
 
+    const activePeriod = await db.appraisalPeriod.findFirst({
+      where: { OR: [{ is_active: true }, { status: 'OPEN' }] },
+      orderBy: [{ is_active: 'desc' }, { id: 'desc' }],
+      select: { id: true },
+    });
+
     const updated = await db.$transaction(async (tx) => {
       if (data.ratings && data.ratings.length > 0) {
         await tx.commRating.deleteMany({ where: { assessment_id: id } });
@@ -359,6 +365,7 @@ export class CommunicationService {
       return tx.commAssessment.update({
         where: { id },
         data: {
+          appraisal_period_id: activePeriod?.id ?? null,
           status: data.status,
           assessor_id: assessorUserId,
           assessed_at: new Date(),

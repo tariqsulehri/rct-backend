@@ -256,6 +256,7 @@ export const assessmentService = {
       const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const assessmentScore = computeAssessmentScore(newType, newProjects, newLevel, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(current.technology_id);
+      const activePeriodId = await getActiveAppraisalPeriodId();
 
       await assertUniqueCompetencyImportance(
         current.employee_id,
@@ -268,6 +269,7 @@ export const assessmentService = {
       const assessment = await db.skillAssessment.update({
         where: { id },
         data: {
+          appraisal_period_id: activePeriodId,
           department_id: current.employee.department_id,
           domain_id: refs.domainId,
           competency_id: refs.competencyId,
@@ -325,6 +327,7 @@ export const assessmentService = {
       const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const assessmentScore = computeAssessmentScore(newType, newProjects, newLevel, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(current.technology_id);
+      const activePeriodId = await getActiveAppraisalPeriodId();
 
       await assertUniqueCompetencyImportance(
         current.employee_id,
@@ -337,6 +340,7 @@ export const assessmentService = {
       const assessment = await db.skillAssessment.update({
         where: { id },
         data: {
+          appraisal_period_id: activePeriodId,
           department_id: current.employee.department_id,
           domain_id: refs.domainId,
           competency_id: refs.competencyId,
@@ -390,6 +394,7 @@ export const assessmentService = {
         { counts_toward_score: false, is_terminal: false },
         'pending',
       );
+      const activePeriodId = await getActiveAppraisalPeriodId();
 
       const whereClause: any = {
         employee_id: employee.id,
@@ -414,6 +419,7 @@ export const assessmentService = {
         },
         data: {
           status: pendingStatus,
+          appraisal_period_id: activePeriodId,
           assessed_by: submittedByEmployeeId,
           updated_at: new Date(),
         },
