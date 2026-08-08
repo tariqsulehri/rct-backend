@@ -1,9 +1,10 @@
+import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 import { assertActiveSubmissionWindow } from './period-validation.service';
 
 describe('assertActiveSubmissionWindow', () => {
   const mockDb = {
     appraisalPeriod: {
-      findMany: jest.fn(),
+      findMany: jest.fn<any>(),
     },
   };
 
