@@ -121,4 +121,34 @@ export const reportsController = {
       next(error);
     }
   },
+
+  async getExecutiveSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await reportsService.getExecutiveSummaryReport(req.user!.id, req.user!.employeeId, req.user!.role);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Get executive summary error');
+      next(error);
+    }
+  },
+
+  async getCombinedMatrix(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await reportsService.getCombinedTalentMatrixReport(req.user!.id, req.user!.employeeId, req.user!.role);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Get combined talent matrix error');
+      next(error);
+    }
+  },
+
+  async getYoYGrowth(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await reportsService.getMultiYearYoYGrowthReport(req.user!.id, req.user!.employeeId, req.user!.role);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error({ error }, 'Get YoY growth error');
+      next(error);
+    }
+  },
 };

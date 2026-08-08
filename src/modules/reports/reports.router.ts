@@ -32,5 +32,8 @@ router.get('/gap-matrix',           requireReportsViewOrEngineer, reportsControl
 router.get('/gap-report/download',  requirePermission('reports.view'), reportsController.downloadGapReport);
 router.get('/skills-summary',    requirePermission('reports.view'), reportsController.getSkillsSummary);
 router.get('/assessment-history', requirePermission('reports.view'), reportsController.getAssessmentHistory);
+router.get('/executive-summary',  requirePermission('reports.view'), reportsController.getExecutiveSummary);
+router.get('/combined-matrix',   requirePermission('reports.view'), reportsController.getCombinedMatrix);
+router.get('/yoy-growth',        requireReportsViewOrEngineer, reportsController.getYoYGrowth);
 
 export default router;
