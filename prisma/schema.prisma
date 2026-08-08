@@ -665,7 +665,7 @@ model AppraisalPeriod {
 
 model CommAssessment {
   id                  String   @id @default(uuid()) @db.Uuid
-  subject_id          Int
+  employee_id         Int
   appraisal_period_id Int?
   org_level_key       String
   status              String   @default("approved") // 'draft' | 'pending' | 'approved'
@@ -674,12 +674,12 @@ model CommAssessment {
   created_at          DateTime @default(now())
   updated_at          DateTime @updatedAt
 
-  employee Employee         @relation("EmployeeCommAssessments", fields: [subject_id], references: [id], onDelete: Cascade)
+  employee Employee         @relation("EmployeeCommAssessments", fields: [employee_id], references: [id], onDelete: Cascade)
   period   AppraisalPeriod? @relation(fields: [appraisal_period_id], references: [id], onDelete: SetNull)
   assessor User?            @relation("AssessorCommAssessments", fields: [assessor_id], references: [id], onDelete: SetNull)
   ratings  CommRating[]
 
-  @@index([subject_id])
+  @@index([employee_id])
   @@index([appraisal_period_id])
   @@index([assessor_id])
   @@index([status])

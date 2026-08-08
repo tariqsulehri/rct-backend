@@ -37,7 +37,8 @@ export function gradeLevelToOrgLevelKey(level: number): OrgLevelKey {
 
 export interface FormattedCommAssessmentResponse {
   id: string;
-  subject_id: number;
+  employee_id: number;
+  subject_id: number; // Backwards-compatible alias
   emp_code: string;
   employee_name: string;
   org_level_key: string;
@@ -66,22 +67,10 @@ export class CommunicationService {
     return this.config;
   }
 
-  updateCommConfig(updatedConfig: Partial<CefrEngineConfig>): CefrEngineConfig {
+  updateCommConfig(newConfig: Partial<CefrEngineConfig>): CefrEngineConfig {
     this.config = {
       ...this.config,
-      ...updatedConfig,
-      orgLevels: {
-        ...this.config.orgLevels,
-        ...(updatedConfig.orgLevels || {}),
-      },
-      targetOverrides: {
-        ...this.config.targetOverrides,
-        ...(updatedConfig.targetOverrides || {}),
-      },
-      policy: {
-        ...this.config.policy,
-        ...(updatedConfig.policy || {}),
-      },
+      ...newConfig,
     };
     return this.config;
   }
@@ -142,7 +131,7 @@ export class CommunicationService {
     const saved = await db.$transaction(async (tx) => {
       const assessment = await tx.commAssessment.create({
         data: {
-          subject_id: employee.id,
+          employee_id: employee.id,
           appraisal_period_id: activePeriod?.id ?? null,
           org_level_key: orgLevelKey,
           status,
@@ -169,7 +158,8 @@ export class CommunicationService {
 
     return {
       id: saved.id,
-      subject_id: saved.subject_id,
+      employee_id: saved.employee_id,
+      subject_id: saved.employee_id,
       emp_code: employee.emp_code,
       employee_name: employee.full_name,
       org_level_key: saved.org_level_key,
@@ -214,7 +204,8 @@ export class CommunicationService {
 
     return {
       id: assessment.id,
-      subject_id: assessment.subject_id,
+      employee_id: assessment.employee_id,
+      subject_id: assessment.employee_id,
       emp_code: assessment.employee.emp_code,
       employee_name: assessment.employee.full_name,
       org_level_key: assessment.org_level_key,
@@ -244,7 +235,7 @@ export class CommunicationService {
 
     const assessment = await db.commAssessment.findFirst({
       where: {
-        subject_id: employee.id,
+        employee_id: employee.id,
         ...(onlyApproved ? { status: 'approved' } : {}),
       },
       orderBy: { assessed_at: 'desc' },
@@ -271,7 +262,8 @@ export class CommunicationService {
 
     return {
       id: assessment.id,
-      subject_id: assessment.subject_id,
+      employee_id: assessment.employee_id,
+      subject_id: assessment.employee_id,
       emp_code: assessment.employee.emp_code,
       employee_name: assessment.employee.full_name,
       org_level_key: assessment.org_level_key,
@@ -297,7 +289,7 @@ export class CommunicationService {
     }
 
     const assessments = await db.commAssessment.findMany({
-      where: { subject_id: employee.id },
+      where: { employee_id: employee.id },
       orderBy: { assessed_at: 'desc' },
       include: {
         assessor: {
@@ -317,7 +309,8 @@ export class CommunicationService {
 
       return {
         id: a.id,
-        subject_id: a.subject_id,
+        employee_id: a.employee_id,
+        subject_id: a.employee_id,
         emp_code: employee.emp_code,
         employee_name: employee.full_name,
         org_level_key: a.org_level_key,
@@ -390,7 +383,8 @@ export class CommunicationService {
 
     return {
       id: updated.id,
-      subject_id: updated.subject_id,
+      employee_id: updated.employee_id,
+      subject_id: updated.employee_id,
       emp_code: updated.employee.emp_code,
       employee_name: updated.employee.full_name,
       org_level_key: updated.org_level_key,
