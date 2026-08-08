@@ -14,6 +14,7 @@ import {
 } from '../../scoring/scoring.engine';
 import { createScoringConfigService } from '../../scoring/scoring-config.service';
 import { createScoreRecalculationService } from '../../scoring/score-recalculation.service';
+import { assertActiveSubmissionWindow } from '../config/period-validation.service';
 
 const scoringConfigService = createScoringConfigService(db);
 const scoreRecalculationService = createScoreRecalculationService(db, {
@@ -114,15 +115,6 @@ async function assertUniqueCompetencyImportance(
   }
 }
 
-async function getActiveAppraisalPeriodId(): Promise<number | null> {
-  const activePeriod = await db.appraisalPeriod.findFirst({
-    where: { OR: [{ is_active: true }, { status: 'OPEN' }] },
-    orderBy: [{ is_active: 'desc' }, { id: 'desc' }],
-    select: { id: true },
-  });
-  return activePeriod?.id ?? null;
-}
-
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export const assessmentService = {
@@ -152,7 +144,8 @@ export const assessmentService = {
       const level = request.level ?? 'Unset';
       const assessmentScore = computeAssessmentScore(request.type, request.projects, level, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(request.technology_id);
-      const activePeriodId = await getActiveAppraisalPeriodId();
+      const activePeriod = await assertActiveSubmissionWindow({ isManagerReview: !isEngineer });
+      const activePeriodId = activePeriod.id;
 
       await assertUniqueCompetencyImportance(
         empInternalId,
@@ -256,7 +249,8 @@ export const assessmentService = {
       const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const assessmentScore = computeAssessmentScore(newType, newProjects, newLevel, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(current.technology_id);
-      const activePeriodId = await getActiveAppraisalPeriodId();
+      const activePeriod = await assertActiveSubmissionWindow({ isManagerReview: true });
+      const activePeriodId = activePeriod.id;
 
       await assertUniqueCompetencyImportance(
         current.employee_id,
@@ -327,7 +321,8 @@ export const assessmentService = {
       const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const assessmentScore = computeAssessmentScore(newType, newProjects, newLevel, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(current.technology_id);
-      const activePeriodId = await getActiveAppraisalPeriodId();
+      const activePeriod = await assertActiveSubmissionWindow({ isManagerReview: true });
+      const activePeriodId = activePeriod.id;
 
       await assertUniqueCompetencyImportance(
         current.employee_id,
@@ -394,7 +389,8 @@ export const assessmentService = {
         { counts_toward_score: false, is_terminal: false },
         'pending',
       );
-      const activePeriodId = await getActiveAppraisalPeriodId();
+      const activePeriod = await assertActiveSubmissionWindow();
+      const activePeriodId = activePeriod.id;
 
       const whereClause: any = {
         employee_id: employee.id,

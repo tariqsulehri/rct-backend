@@ -1,4 +1,5 @@
 import { db } from '../../config/database';
+import { assertActiveSubmissionWindow } from '../config/period-validation.service';
 import {
   DEFAULT_CEFR_CONFIG,
   OrgLevelKey,
@@ -121,18 +122,14 @@ export class CommunicationService {
     // Pre-evaluate to validate ratings against engine rules
     const evaluation = assess(this.config, orgLevelKey, ratingInputs);
 
-    const activePeriod = await db.appraisalPeriod.findFirst({
-      where: { OR: [{ is_active: true }, { status: 'OPEN' }] },
-      orderBy: [{ is_active: 'desc' }, { id: 'desc' }],
-      select: { id: true },
-    });
+    const activePeriod = await assertActiveSubmissionWindow({ isManagerReview: !isEngineer });
 
     // Save in database transaction
     const saved = await db.$transaction(async (tx) => {
       const assessment = await tx.commAssessment.create({
         data: {
           employee_id: employee.id,
-          appraisal_period_id: activePeriod?.id ?? null,
+          appraisal_period_id: activePeriod.id,
           org_level_key: orgLevelKey,
           status,
           assessor_id: assessorUserId ?? null,
@@ -343,11 +340,7 @@ export class CommunicationService {
       throw new Error(`Communication assessment '${id}' not found`);
     }
 
-    const activePeriod = await db.appraisalPeriod.findFirst({
-      where: { OR: [{ is_active: true }, { status: 'OPEN' }] },
-      orderBy: [{ is_active: 'desc' }, { id: 'desc' }],
-      select: { id: true },
-    });
+    const activePeriod = await assertActiveSubmissionWindow({ isManagerReview: true });
 
     const updated = await db.$transaction(async (tx) => {
       if (data.ratings && data.ratings.length > 0) {
@@ -365,7 +358,7 @@ export class CommunicationService {
       return tx.commAssessment.update({
         where: { id },
         data: {
-          appraisal_period_id: activePeriod?.id ?? null,
+          appraisal_period_id: activePeriod.id,
           status: data.status,
           assessor_id: assessorUserId,
           assessed_at: new Date(),
