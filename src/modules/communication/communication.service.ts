@@ -132,11 +132,18 @@ export class CommunicationService {
     // Pre-evaluate to validate ratings against engine rules
     const evaluation = assess(this.config, orgLevelKey, ratingInputs);
 
+    const activePeriod = await db.appraisalPeriod.findFirst({
+      where: { OR: [{ is_active: true }, { status: 'OPEN' }] },
+      orderBy: [{ is_active: 'desc' }, { id: 'desc' }],
+      select: { id: true },
+    });
+
     // Save in database transaction
     const saved = await db.$transaction(async (tx) => {
       const assessment = await tx.commAssessment.create({
         data: {
           subject_id: employee.id,
+          appraisal_period_id: activePeriod?.id ?? null,
           org_level_key: orgLevelKey,
           status,
           assessor_id: assessorUserId ?? null,

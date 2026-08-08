@@ -114,6 +114,15 @@ async function assertUniqueCompetencyImportance(
   }
 }
 
+async function getActiveAppraisalPeriodId(): Promise<number | null> {
+  const activePeriod = await db.appraisalPeriod.findFirst({
+    where: { OR: [{ is_active: true }, { status: 'OPEN' }] },
+    orderBy: [{ is_active: 'desc' }, { id: 'desc' }],
+    select: { id: true },
+  });
+  return activePeriod?.id ?? null;
+}
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export const assessmentService = {
@@ -143,6 +152,7 @@ export const assessmentService = {
       const level = request.level ?? 'Unset';
       const assessmentScore = computeAssessmentScore(request.type, request.projects, level, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(request.technology_id);
+      const activePeriodId = await getActiveAppraisalPeriodId();
 
       await assertUniqueCompetencyImportance(
         empInternalId,
@@ -160,6 +170,7 @@ export const assessmentService = {
         },
         create: {
           employee_id: empInternalId,
+          appraisal_period_id: activePeriodId,
           department_id: employee.department_id,
           domain_id: refs.domainId,
           competency_id: refs.competencyId,
@@ -172,6 +183,7 @@ export const assessmentService = {
           assessed_by: assessedByEmployeeId,
         },
         update: {
+          appraisal_period_id: activePeriodId,
           department_id: employee.department_id,
           domain_id: refs.domainId,
           competency_id: refs.competencyId,

@@ -548,12 +548,13 @@ model Employee {
 }
 
 model SkillAssessment {
-  id            Int  @id @default(autoincrement())
-  employee_id   Int
-  department_id Int?
-  domain_id     Int?
-  competency_id Int?
-  technology_id Int
+  id                  Int  @id @default(autoincrement())
+  employee_id         Int
+  appraisal_period_id Int?
+  department_id       Int?
+  domain_id           Int?
+  competency_id       Int?
+  technology_id       Int
 
   type     String // 'Primary' | 'Secondary' | 'Tertiary'
   projects Int // 0 | 1 | 2 | 3
@@ -565,15 +566,17 @@ model SkillAssessment {
   assessed_at DateTime @default(now())
   updated_at  DateTime @updatedAt
 
-  employee   Employee     @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  department Department?  @relation(fields: [department_id], references: [id], onDelete: SetNull)
-  domain     SkillDomain? @relation(fields: [domain_id], references: [id], onDelete: SetNull)
-  competency Competency?  @relation(fields: [competency_id], references: [id], onDelete: SetNull)
-  technology Technology   @relation(fields: [technology_id], references: [id], onDelete: Cascade)
+  employee   Employee         @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  period     AppraisalPeriod? @relation(fields: [appraisal_period_id], references: [id], onDelete: SetNull)
+  department Department?      @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  domain     SkillDomain?     @relation(fields: [domain_id], references: [id], onDelete: SetNull)
+  competency Competency?      @relation(fields: [competency_id], references: [id], onDelete: SetNull)
+  technology Technology       @relation(fields: [technology_id], references: [id], onDelete: Cascade)
 
   @@unique([employee_id, technology_id]) // one assessment per employee per technology
   @@unique([employee_id, competency_id, type]) // max 1 Primary, 1 Secondary, 1 Tertiary per competency per employee
   @@index([employee_id])
+  @@index([appraisal_period_id])
   @@index([department_id])
   @@index([domain_id])
   @@index([competency_id])
@@ -622,6 +625,7 @@ model DomainScore {
 
   @@unique([employee_id, domain_id])
   @@index([employee_id])
+  @@index([domain_id])
   @@map("domain_scores")
 }
 
@@ -646,6 +650,9 @@ model AppraisalPeriod {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  skill_assessments SkillAssessment[]
+  comm_assessments  CommAssessment[]
+
   @@index([calendar_year])
   @@index([status])
   @@index([is_active])
@@ -657,20 +664,23 @@ model AppraisalPeriod {
 // ============================================================================
 
 model CommAssessment {
-  id            String   @id @default(uuid()) @db.Uuid
-  subject_id    Int
-  org_level_key String
-  status        String   @default("approved") // 'draft' | 'pending' | 'approved'
-  assessor_id   Int?
-  assessed_at   DateTime @default(now())
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  id                  String   @id @default(uuid()) @db.Uuid
+  subject_id          Int
+  appraisal_period_id Int?
+  org_level_key       String
+  status              String   @default("approved") // 'draft' | 'pending' | 'approved'
+  assessor_id         Int?
+  assessed_at         DateTime @default(now())
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
 
-  employee Employee     @relation("EmployeeCommAssessments", fields: [subject_id], references: [id], onDelete: Cascade)
-  assessor User?        @relation("AssessorCommAssessments", fields: [assessor_id], references: [id], onDelete: SetNull)
+  employee Employee         @relation("EmployeeCommAssessments", fields: [subject_id], references: [id], onDelete: Cascade)
+  period   AppraisalPeriod? @relation(fields: [appraisal_period_id], references: [id], onDelete: SetNull)
+  assessor User?            @relation("AssessorCommAssessments", fields: [assessor_id], references: [id], onDelete: SetNull)
   ratings  CommRating[]
 
   @@index([subject_id])
+  @@index([appraisal_period_id])
   @@index([assessor_id])
   @@index([status])
   @@index([assessed_at])

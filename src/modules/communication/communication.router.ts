@@ -22,7 +22,7 @@ router.put('/config', requireRole('ADMIN'), communicationController.updateConfig
 // Create CEFR communication assessment (Line Managers, Admins & Communication Experts)
 router.post(
   '/assessments',
-  requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN', 'TOP_MANAGEMENT', 'COMMUNICATION_EXPERT', 'LANGUAGE_EXPERT'),
+  requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN', 'TOP_MANAGEMENT', 'ENGINEER'),
   validate(createCommAssessmentSchema),
   communicationController.createAssessment,
 );
