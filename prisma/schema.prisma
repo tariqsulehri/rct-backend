@@ -407,6 +407,7 @@ model User {
   created_line_manager_assignments EmployeeLineManagerAssignment[] @relation("CreatedLineManagerAssignments")
   access_audit_actions             AccessAuditLog[]                @relation("AccessAuditActor")
   access_audit_targets             AccessAuditLog[]                @relation("AccessAuditTarget")
+  assessed_comm_assessments        CommAssessment[]                @relation("AssessorCommAssessments")
 
   @@index([employee_id])
   @@index([role_id])
@@ -536,6 +537,7 @@ model Employee {
   skill_assessments        SkillAssessment[]
   competency_scores        CompetencyScore[]
   domain_scores            DomainScore[]
+  comm_assessments         CommAssessment[]                @relation("EmployeeCommAssessments")
 
   @@index([organization_id])
   @@index([current_grade_id])
@@ -546,12 +548,13 @@ model Employee {
 }
 
 model SkillAssessment {
-  id            Int  @id @default(autoincrement())
-  employee_id   Int
-  department_id Int?
-  domain_id     Int?
-  competency_id Int?
-  technology_id Int
+  id                  Int  @id @default(autoincrement())
+  employee_id         Int
+  appraisal_period_id Int?
+  department_id       Int?
+  domain_id           Int?
+  competency_id       Int?
+  technology_id       Int
 
   type     String // 'Primary' | 'Secondary' | 'Tertiary'
   projects Int // 0 | 1 | 2 | 3
@@ -563,14 +566,17 @@ model SkillAssessment {
   assessed_at DateTime @default(now())
   updated_at  DateTime @updatedAt
 
-  employee   Employee     @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  department Department?  @relation(fields: [department_id], references: [id], onDelete: SetNull)
-  domain     SkillDomain? @relation(fields: [domain_id], references: [id], onDelete: SetNull)
-  competency Competency?  @relation(fields: [competency_id], references: [id], onDelete: SetNull)
-  technology Technology   @relation(fields: [technology_id], references: [id], onDelete: Cascade)
+  employee   Employee         @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  period     AppraisalPeriod? @relation(fields: [appraisal_period_id], references: [id], onDelete: SetNull)
+  department Department?      @relation(fields: [department_id], references: [id], onDelete: SetNull)
+  domain     SkillDomain?     @relation(fields: [domain_id], references: [id], onDelete: SetNull)
+  competency Competency?      @relation(fields: [competency_id], references: [id], onDelete: SetNull)
+  technology Technology       @relation(fields: [technology_id], references: [id], onDelete: Cascade)
 
   @@unique([employee_id, technology_id]) // one assessment per employee per technology
+  @@unique([employee_id, competency_id, type]) // max 1 Primary, 1 Secondary, 1 Tertiary per competency per employee
   @@index([employee_id])
+  @@index([appraisal_period_id])
   @@index([department_id])
   @@index([domain_id])
   @@index([competency_id])
@@ -619,6 +625,7 @@ model DomainScore {
 
   @@unique([employee_id, domain_id])
   @@index([employee_id])
+  @@index([domain_id])
   @@map("domain_scores")
 }
 
@@ -629,23 +636,68 @@ model DomainScore {
 model AppraisalPeriod {
   id                    Int       @id @default(autoincrement())
   code                  String    @unique // e.g. "CY2024", "CY2025", "CY2026", "FY2025-H1"
-  name                  String    // "2026 Annual Performance Review"
+  name                  String // "2026 Annual Performance Review"
   period_type           String    @default("ANNUAL") // "ANNUAL" | "BIANNUAL" | "QUARTERLY" | "CUSTOM"
   calendar_year         Int       @default(2026)
   start_date            DateTime
   end_date              DateTime
   grace_period_end      DateTime?
   status                String    @default("DRAFT") // "DRAFT" | "OPEN" | "LOCKED" | "ARCHIVED"
-  is_active             Boolean   @default(false)   // Active period for live submissions
+  is_active             Boolean   @default(false) // Active period for live submissions
   allow_self_submission Boolean   @default(true)
   auto_rollover_skills  Boolean   @default(true)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  skill_assessments SkillAssessment[]
+  comm_assessments  CommAssessment[]
+
   @@index([calendar_year])
   @@index([status])
   @@index([is_active])
   @@map("appraisal_periods")
+}
+
+// ============================================================================
+// CEFR COMMUNICATION ASSESSMENTS
+// ============================================================================
+
+model CommAssessment {
+  id                  String   @id @default(uuid()) @db.Uuid
+  employee_id         Int
+  appraisal_period_id Int?
+  org_level_key       String
+  status              String   @default("approved") // 'draft' | 'pending' | 'approved'
+  assessor_id         Int?
+  assessed_at         DateTime @default(now())
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  employee Employee         @relation("EmployeeCommAssessments", fields: [employee_id], references: [id], onDelete: Cascade)
+  period   AppraisalPeriod? @relation(fields: [appraisal_period_id], references: [id], onDelete: SetNull)
+  assessor User?            @relation("AssessorCommAssessments", fields: [assessor_id], references: [id], onDelete: SetNull)
+  ratings  CommRating[]
+
+  @@index([employee_id])
+  @@index([appraisal_period_id])
+  @@index([assessor_id])
+  @@index([status])
+  @@index([assessed_at])
+  @@map("comm_assessments")
+}
+
+model CommRating {
+  assessment_id  String  @db.Uuid
+  competency_key String
+  cefr           String
+  evidence       String? @db.Text
+
+  assessment CommAssessment @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
+
+  @@id([assessment_id, competency_key])
+  @@index([assessment_id])
+  @@index([competency_key])
+  @@map("comm_ratings")
 }
 

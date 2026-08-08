@@ -1,0 +1,86 @@
+import { describe, it, expect } from '@jest/globals';
+import { gradeLevelToOrgLevelKey, communicationService } from './communication.service';
+import {
+  createCommAssessmentSchema,
+  updateCommAssessmentStatusSchema,
+} from './communication.schema';
+
+describe('Communication Service & Schema', () => {
+  describe('Grade Level to Org Level Mapping', () => {
+    it('maps level 1 through 9 to exact org level keys', () => {
+      expect(gradeLevelToOrgLevelKey(1)).toBe('associate');
+      expect(gradeLevelToOrgLevelKey(2)).toBe('engineer');
+      expect(gradeLevelToOrgLevelKey(3)).toBe('senior');
+      expect(gradeLevelToOrgLevelKey(4)).toBe('lead');
+      expect(gradeLevelToOrgLevelKey(5)).toBe('manager');
+      expect(gradeLevelToOrgLevelKey(6)).toBe('senior_mgr');
+      expect(gradeLevelToOrgLevelKey(7)).toBe('director');
+      expect(gradeLevelToOrgLevelKey(8)).toBe('vp');
+      expect(gradeLevelToOrgLevelKey(9)).toBe('c_level');
+      expect(gradeLevelToOrgLevelKey(10)).toBe('c_level');
+    });
+  });
+
+  describe('Configuration Service', () => {
+    it('returns valid CEFR configuration', () => {
+      const config = communicationService.getCommConfig();
+      expect(config).toBeDefined();
+      expect(Object.keys(config.cefrLevels)).toHaveLength(6);
+      expect(config.competencies).toHaveLength(6);
+      expect(Object.keys(config.orgLevels)).toHaveLength(9);
+      expect(config.targetOverrides.associate.presentation).toBe('A2');
+      expect(config.targetOverrides.associate.stakeholder_exec).toBe('A2');
+    });
+  });
+
+  describe('Zod Schema Validation', () => {
+    it('validates a complete valid create assessment request', () => {
+      const payload = {
+        employee_id: '101',
+        org_level_key: 'senior',
+        status: 'approved',
+        ratings: [
+          { competency_key: 'written_clarity', cefr: 'B2', evidence: 'Great RFCs' },
+          { competency_key: 'spoken_fluency', cefr: 'B2' },
+          { competency_key: 'presentation', cefr: 'B1' },
+          { competency_key: 'active_listening', cefr: 'B2' },
+          { competency_key: 'stakeholder_exec', cefr: 'B1' },
+          { competency_key: 'cross_cultural', cefr: 'B2' },
+        ],
+      };
+
+      const parsed = createCommAssessmentSchema.safeParse(payload);
+      expect(parsed.success).toBe(true);
+    });
+
+    it('rejects invalid CEFR level code in ratings', () => {
+      const payload = {
+        employee_id: '101',
+        ratings: [{ competency_key: 'written_clarity', cefr: 'X9' }],
+      };
+
+      const parsed = createCommAssessmentSchema.safeParse(payload);
+      expect(parsed.success).toBe(false);
+    });
+
+    it('rejects invalid competency key in ratings', () => {
+      const payload = {
+        employee_id: '101',
+        ratings: [{ competency_key: 'invalid_skill', cefr: 'B2' }],
+      };
+
+      const parsed = createCommAssessmentSchema.safeParse(payload);
+      expect(parsed.success).toBe(false);
+    });
+
+    it('validates status update payload', () => {
+      const payload = {
+        status: 'approved',
+        ratings: [{ competency_key: 'presentation', cefr: 'B2' }],
+      };
+
+      const parsed = updateCommAssessmentStatusSchema.safeParse(payload);
+      expect(parsed.success).toBe(true);
+    });
+  });
+});

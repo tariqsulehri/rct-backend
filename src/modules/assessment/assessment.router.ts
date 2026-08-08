@@ -3,7 +3,7 @@ import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/authorize';
 import { validate } from '../../middleware/validate';
 import { assessmentController } from './assessment.controller';
-import { createSkillAssessmentSchema, updateSkillAssessmentSchema, approveSkillAssessmentSchema } from './assessment.schema';
+import { createSkillAssessmentSchema, updateSkillAssessmentSchema, approveSkillAssessmentSchema, submitDraftsSchema } from './assessment.schema';
 
 const router = Router();
 
@@ -53,6 +53,21 @@ router.delete(
   '/skill-assessments/:id',
   requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN', 'ENGINEER'),
   assessmentController.deleteAssessment,
+);
+
+// Submit draft skill assessments for approval
+router.post(
+  '/employees/:empCode/submit-drafts',
+  requireRole('MANAGER', 'LINE_MANAGER', 'TOP_MANAGEMENT', 'ADMIN', 'ENGINEER'),
+  (req, res, next) => {
+    if (req.user!.role === 'ENGINEER' && req.user!.empCode !== req.params.empCode) {
+      res.status(403).json({ success: false, error: 'Access denied' });
+      return;
+    }
+    next();
+  },
+  validate(submitDraftsSchema),
+  assessmentController.submitDrafts,
 );
 
 // Get assessments for specific employee (MANAGER/ADMIN can see anyone; ENGINEER only their own)

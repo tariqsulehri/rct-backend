@@ -1525,12 +1525,6 @@ export const configService = {
   },
 
   async createAppraisalPeriod(data: CreateAppraisalPeriodInput) {
-    if (data.is_active) {
-      await db.appraisalPeriod.updateMany({
-        data: { is_active: false },
-      });
-    }
-
     return db.appraisalPeriod.create({
       data: {
         code:                  data.code,
@@ -1549,13 +1543,6 @@ export const configService = {
   },
 
   async updateAppraisalPeriod(id: number, data: UpdateAppraisalPeriodInput) {
-    if (data.is_active === true) {
-      await db.appraisalPeriod.updateMany({
-        where: { id: { not: id } },
-        data: { is_active: false },
-      });
-    }
-
     const updateData: any = { ...data };
     if (data.start_date) updateData.start_date = new Date(data.start_date);
     if (data.end_date) updateData.end_date = new Date(data.end_date);

@@ -6,6 +6,7 @@ export const createSkillAssessmentSchema = z.object({
   type: z.enum(['Primary', 'Secondary', 'Tertiary']),
   projects: z.number().int().min(0).max(3),
   level: z.enum(['Expert', 'Advanced', 'Proficient', 'Foundational', 'Beginner', 'Awareness', 'Unset']).default('Unset'),
+  status: z.enum(['draft', 'pending', 'approved']).optional(),
 });
 
 export const updateSkillAssessmentSchema = createSkillAssessmentSchema
@@ -18,6 +19,10 @@ export const approveSkillAssessmentSchema = z.object({
   projects: z.number().int().min(0).max(3).optional(),
 });
 
+export const submitDraftsSchema = z.object({
+  assessment_ids: z.array(z.number().int().positive()).optional(),
+});
+
 export const getTeamRosterSchema = z.object({
   department: z.string().optional(),
   grade_id: z.number().int().optional(),
@@ -26,6 +31,7 @@ export const getTeamRosterSchema = z.object({
 export type CreateSkillAssessmentRequest = z.infer<typeof createSkillAssessmentSchema>;
 export type UpdateSkillAssessmentRequest = z.infer<typeof updateSkillAssessmentSchema>;
 export type ApproveSkillAssessmentRequest = z.infer<typeof approveSkillAssessmentSchema>;
+export type SubmitDraftsRequest = z.infer<typeof submitDraftsSchema>;
 export type GetTeamRosterRequest = z.infer<typeof getTeamRosterSchema>;
 
 export interface SkillAssessmentResponse {

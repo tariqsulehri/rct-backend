@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { db } from '../../config/database';
 import logger from '../../config/logger';
 import {
@@ -13,6 +14,7 @@ import {
 } from '../../scoring/scoring.engine';
 import { createScoringConfigService } from '../../scoring/scoring-config.service';
 import { createScoreRecalculationService } from '../../scoring/score-recalculation.service';
+import { assertActiveSubmissionWindow } from '../config/period-validation.service';
 
 const scoringConfigService = createScoringConfigService(db);
 const scoreRecalculationService = createScoreRecalculationService(db, {
@@ -26,9 +28,20 @@ const scoreRecalculationService = createScoreRecalculationService(db, {
 // assessments. Called after every create/update/approval so reports are fresh
 // immediately after assessment changes.
 
-async function getInitialAssessmentStatus(isEngineer: boolean): Promise<string> {
+async function getInitialAssessmentStatus(isEngineer: boolean, requestedStatus?: string): Promise<string> {
+  if (requestedStatus === 'draft') {
+    return scoringConfigService.getConfiguredStatusCode('draft', { counts_toward_score: false, is_terminal: false }, 'draft');
+  }
+  if (requestedStatus === 'pending') {
+    return scoringConfigService.getConfiguredStatusCode('pending', { counts_toward_score: false, is_terminal: false }, 'pending');
+  }
+  if (requestedStatus === 'approved') {
+    return isEngineer
+      ? scoringConfigService.getConfiguredStatusCode('draft', { counts_toward_score: false, is_terminal: false }, 'draft')
+      : scoringConfigService.getConfiguredStatusCode('approved', { counts_toward_score: true, is_terminal: true }, 'approved');
+  }
   return isEngineer
-    ? scoringConfigService.getConfiguredStatusCode('pending', { counts_toward_score: false, is_terminal: false }, 'pending')
+    ? scoringConfigService.getConfiguredStatusCode('draft', { counts_toward_score: false, is_terminal: false }, 'draft')
     : scoringConfigService.getConfiguredStatusCode('approved', { counts_toward_score: true, is_terminal: true }, 'approved');
 }
 
@@ -58,6 +71,50 @@ async function getAssessmentReferenceIds(
   };
 }
 
+/**
+ * Enforces business rule: at most one tool of each importance level (Primary, Secondary, Tertiary)
+ * per competency per employee.
+ */
+async function assertUniqueCompetencyImportance(
+  employeeId: number,
+  competencyId: number | null | undefined,
+  type: string,
+  excludeTechnologyId?: number,
+  excludeAssessmentId?: number,
+): Promise<void> {
+  if (!competencyId) return;
+
+  const whereClause: Prisma.SkillAssessmentWhereInput = {
+    employee_id: employeeId,
+    competency_id: competencyId,
+    type,
+  };
+
+  if (excludeTechnologyId) {
+    whereClause.technology_id = { not: excludeTechnologyId };
+  }
+  if (excludeAssessmentId) {
+    whereClause.id = { not: excludeAssessmentId };
+  }
+
+  const existing = await db.skillAssessment.findFirst({
+    where: whereClause,
+    include: {
+      technology: { select: { name: true } },
+      competency: { select: { name: true } },
+    },
+  });
+
+  if (existing) {
+    const techName = existing.technology?.name ?? 'another tool';
+    const compName = existing.competency?.name ?? 'this skill';
+    const error = new Error(
+      `A ${type} tool ('${techName}') is already assigned for '${compName}'. Only one ${type} tool is allowed per competency.`
+    );
+    throw Object.assign(error, { statusCode: 409, code: 'DUPLICATE_IMPORTANCE' });
+  }
+}
+
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export const assessmentService = {
@@ -81,12 +138,21 @@ export const assessmentService = {
       const empInternalId = employee.id;
 
       const isEngineer = role === 'ENGINEER';
-      const status = await getInitialAssessmentStatus(isEngineer);
+      const status = await getInitialAssessmentStatus(isEngineer, request.status);
 
       const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const level = request.level ?? 'Unset';
       const assessmentScore = computeAssessmentScore(request.type, request.projects, level, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(request.technology_id);
+      const activePeriod = await assertActiveSubmissionWindow({ isManagerReview: !isEngineer });
+      const activePeriodId = activePeriod.id;
+
+      await assertUniqueCompetencyImportance(
+        empInternalId,
+        refs.competencyId,
+        request.type,
+        request.technology_id,
+      );
 
       const assessment = await db.skillAssessment.upsert({
         where: {
@@ -97,6 +163,7 @@ export const assessmentService = {
         },
         create: {
           employee_id: empInternalId,
+          appraisal_period_id: activePeriodId,
           department_id: employee.department_id,
           domain_id: refs.domainId,
           competency_id: refs.competencyId,
@@ -109,6 +176,7 @@ export const assessmentService = {
           assessed_by: assessedByEmployeeId,
         },
         update: {
+          appraisal_period_id: activePeriodId,
           department_id: employee.department_id,
           domain_id: refs.domainId,
           competency_id: refs.competencyId,
@@ -116,6 +184,7 @@ export const assessmentService = {
           projects: request.projects,
           level,
           score: assessmentScore,
+          status: request.status ? (request.status === 'approved' && isEngineer ? undefined : request.status) : undefined,
           assessed_by: assessedByEmployeeId,
         },
       });
@@ -180,10 +249,21 @@ export const assessmentService = {
       const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const assessmentScore = computeAssessmentScore(newType, newProjects, newLevel, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(current.technology_id);
+      const activePeriod = await assertActiveSubmissionWindow({ isManagerReview: true });
+      const activePeriodId = activePeriod.id;
+
+      await assertUniqueCompetencyImportance(
+        current.employee_id,
+        refs.competencyId,
+        newType,
+        undefined,
+        id,
+      );
 
       const assessment = await db.skillAssessment.update({
         where: { id },
         data: {
+          appraisal_period_id: activePeriodId,
           department_id: current.employee.department_id,
           domain_id: refs.domainId,
           competency_id: refs.competencyId,
@@ -191,6 +271,7 @@ export const assessmentService = {
           projects: newProjects,
           level: newLevel,
           score: assessmentScore,
+          status: request.status ?? undefined,
           assessed_by: assessedByEmployeeId,
         },
       });
@@ -240,10 +321,21 @@ export const assessmentService = {
       const { scoringValues, levelWeights, projectCredits } = await scoringConfigService.getAssessmentScoreConfig();
       const assessmentScore = computeAssessmentScore(newType, newProjects, newLevel, scoringValues, levelWeights, projectCredits);
       const refs = await getAssessmentReferenceIds(current.technology_id);
+      const activePeriod = await assertActiveSubmissionWindow({ isManagerReview: true });
+      const activePeriodId = activePeriod.id;
+
+      await assertUniqueCompetencyImportance(
+        current.employee_id,
+        refs.competencyId,
+        newType,
+        undefined,
+        id,
+      );
 
       const assessment = await db.skillAssessment.update({
         where: { id },
         data: {
+          appraisal_period_id: activePeriodId,
           department_id: current.employee.department_id,
           domain_id: refs.domainId,
           competency_id: refs.competencyId,
@@ -279,6 +371,85 @@ export const assessmentService = {
       };
     } catch (error) {
       logger.error({ error, id }, 'Failed to approve skill assessment');
+      throw error;
+    }
+  },
+
+  async submitDraftAssessments(
+    empCode: string,
+    submittedByEmployeeId: number,
+    assessmentIds?: number[],
+  ): Promise<{ count: number; data: SkillAssessmentResponse[] }> {
+    try {
+      const employee = await db.employee.findUnique({ where: { emp_code: empCode } });
+      if (!employee) throw Object.assign(new Error(`Employee emp_code '${empCode}' not found`), { statusCode: 404 });
+
+      const pendingStatus = await scoringConfigService.getConfiguredStatusCode(
+        'pending',
+        { counts_toward_score: false, is_terminal: false },
+        'pending',
+      );
+      const activePeriod = await assertActiveSubmissionWindow();
+      const activePeriodId = activePeriod.id;
+
+      const whereClause: any = {
+        employee_id: employee.id,
+        status: 'draft',
+      };
+
+      if (assessmentIds && assessmentIds.length > 0) {
+        whereClause.id = { in: assessmentIds };
+      }
+
+      const drafts = await db.skillAssessment.findMany({
+        where: whereClause,
+      });
+
+      if (drafts.length === 0) {
+        return { count: 0, data: [] };
+      }
+
+      await db.skillAssessment.updateMany({
+        where: {
+          id: { in: drafts.map((d) => d.id) },
+        },
+        data: {
+          status: pendingStatus,
+          appraisal_period_id: activePeriodId,
+          assessed_by: submittedByEmployeeId,
+          updated_at: new Date(),
+        },
+      });
+
+      logger.info({ empCode, submittedCount: drafts.length }, 'Submitted draft skill assessments for approval');
+
+      const updated = await db.skillAssessment.findMany({
+        where: { id: { in: drafts.map((d) => d.id) } },
+      });
+
+      const assessorIds = [...new Set(updated.map((a) => a.assessed_by))];
+      const assessors = await db.employee.findMany({
+        where: { id: { in: assessorIds } },
+        select: { id: true, emp_code: true },
+      });
+      const assessorMap = new Map(assessors.map((e) => [e.id, e.emp_code]));
+
+      const data: SkillAssessmentResponse[] = updated.map((a) => ({
+        id: a.id,
+        employee_id: empCode,
+        technology_id: a.technology_id,
+        type: a.type,
+        projects: a.projects,
+        level: a.level,
+        status: a.status,
+        assessed_by: assessorMap.get(a.assessed_by) ?? String(a.assessed_by),
+        assessed_at: a.assessed_at.toISOString(),
+        updated_at: a.updated_at.toISOString(),
+      }));
+
+      return { count: drafts.length, data };
+    } catch (error) {
+      logger.error({ error, empCode }, 'Failed to submit draft skill assessments');
       throw error;
     }
   },
