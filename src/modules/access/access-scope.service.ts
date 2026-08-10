@@ -19,7 +19,7 @@ export const accessScopeService = {
   async getAccessibleEmployeeIds(user: AuthUser, options: { forAssessment?: boolean } = {}): Promise<number[]> {
     if (user.role === 'ADMIN' || (user.role === 'TOP_MANAGEMENT' && !options.forAssessment)) {
       const employees = await db.employee.findMany({
-        where: { deleted_at: null },
+        where: { deleted_at: null, is_active: true },
         select: { id: true },
       });
       return employees.map((employee) => employee.id);
@@ -47,6 +47,7 @@ export const accessScopeService = {
       const departmentEmployees = await db.employee.findMany({
         where: {
           deleted_at: null,
+          is_active: true,
           department_id: { in: departmentIds },
         },
         select: { id: true },
@@ -74,7 +75,7 @@ export const accessScopeService = {
       });
       if (managerEmp?.department_id) {
         const departmentEmployees = await db.employee.findMany({
-          where: { department_id: managerEmp.department_id, deleted_at: null },
+          where: { department_id: managerEmp.department_id, deleted_at: null, is_active: true },
           select: { id: true },
         });
         for (const employee of departmentEmployees) ids.add(employee.id);
@@ -87,7 +88,7 @@ export const accessScopeService = {
   async canAccessEmployee(user: AuthUser, employeeId: number, options: { forAssessment?: boolean } = {}): Promise<boolean> {
     if (user.role === 'ADMIN' || (user.role === 'TOP_MANAGEMENT' && !options.forAssessment)) {
       const count = await db.employee.count({
-        where: { id: employeeId, deleted_at: null },
+        where: { id: employeeId, deleted_at: null, is_active: true },
       });
       return count > 0;
     }
@@ -133,7 +134,7 @@ export const accessScopeService = {
       });
       if (managerEmp?.department_id) {
         const deptEmployeeCount = await db.employee.count({
-          where: { id: employeeId, department_id: managerEmp.department_id, deleted_at: null },
+          where: { id: employeeId, department_id: managerEmp.department_id, deleted_at: null, is_active: true },
         });
         if (deptEmployeeCount > 0) return true;
       }

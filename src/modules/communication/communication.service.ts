@@ -46,6 +46,12 @@ export interface FormattedCommAssessmentResponse {
   status: string;
   assessor_id: number | null;
   assessor_name: string | null;
+  appraisal_period_id?: number | null;
+  period?: {
+    id: number;
+    code: string;
+    name: string;
+  } | null;
   assessed_at: Date;
   created_at: Date;
   updated_at: Date;
@@ -147,6 +153,7 @@ export class CommunicationService {
             include: { employee: true },
           },
           ratings: true,
+          period: true,
         },
       });
 
@@ -163,6 +170,12 @@ export class CommunicationService {
       status: saved.status,
       assessor_id: saved.assessor_id,
       assessor_name: saved.assessor?.employee?.full_name ?? null,
+      appraisal_period_id: saved.appraisal_period_id,
+      period: saved.period ? {
+        id: saved.period.id,
+        code: saved.period.code,
+        name: saved.period.name,
+      } : null,
       assessed_at: saved.assessed_at,
       created_at: saved.created_at,
       updated_at: saved.updated_at,
@@ -184,6 +197,7 @@ export class CommunicationService {
           include: { employee: true },
         },
         ratings: true,
+        period: true,
       },
     });
 
@@ -209,6 +223,12 @@ export class CommunicationService {
       status: assessment.status,
       assessor_id: assessment.assessor_id,
       assessor_name: assessment.assessor?.employee?.full_name ?? null,
+      appraisal_period_id: assessment.appraisal_period_id,
+      period: assessment.period ? {
+        id: assessment.period.id,
+        code: assessment.period.code,
+        name: assessment.period.name,
+      } : null,
       assessed_at: assessment.assessed_at,
       created_at: assessment.created_at,
       updated_at: assessment.updated_at,
@@ -242,6 +262,7 @@ export class CommunicationService {
           include: { employee: true },
         },
         ratings: true,
+        period: true,
       },
     });
 
@@ -267,6 +288,12 @@ export class CommunicationService {
       status: assessment.status,
       assessor_id: assessment.assessor_id,
       assessor_name: assessment.assessor?.employee?.full_name ?? null,
+      appraisal_period_id: assessment.appraisal_period_id,
+      period: assessment.period ? {
+        id: assessment.period.id,
+        code: assessment.period.code,
+        name: assessment.period.name,
+      } : null,
       assessed_at: assessment.assessed_at,
       created_at: assessment.created_at,
       updated_at: assessment.updated_at,
@@ -293,6 +320,7 @@ export class CommunicationService {
           include: { employee: true },
         },
         ratings: true,
+        period: true,
       },
     });
 
@@ -314,6 +342,12 @@ export class CommunicationService {
         status: a.status,
         assessor_id: a.assessor_id,
         assessor_name: a.assessor?.employee?.full_name ?? null,
+        appraisal_period_id: a.appraisal_period_id,
+        period: a.period ? {
+          id: a.period.id,
+          code: a.period.code,
+          name: a.period.name,
+        } : null,
         assessed_at: a.assessed_at,
         created_at: a.created_at,
         updated_at: a.updated_at,
@@ -369,6 +403,7 @@ export class CommunicationService {
             include: { employee: true },
           },
           ratings: true,
+          period: true,
         },
       });
     });
@@ -391,6 +426,12 @@ export class CommunicationService {
       status: updated.status,
       assessor_id: updated.assessor_id,
       assessor_name: updated.assessor?.employee?.full_name ?? null,
+      appraisal_period_id: updated.appraisal_period_id,
+      period: updated.period ? {
+        id: updated.period.id,
+        code: updated.period.code,
+        name: updated.period.name,
+      } : null,
       assessed_at: updated.assessed_at,
       created_at: updated.created_at,
       updated_at: updated.updated_at,

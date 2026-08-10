@@ -14,6 +14,9 @@ import {
   weightedOverall,
 } from '../../scoring/reporting.engine';
 import { RoleCode } from '../../types/rbac';
+import { DEFAULT_CEFR_CONFIG, CefrLevelCode } from '../../scoring/cefr.config';
+import { assess, RatingInput } from '../../scoring/cefr.engine';
+import { gradeLevelToOrgLevelKey } from '../communication/communication.service';
 import {
   getAccessibleReportEmployeeIds,
   getEmployeesForManager,
@@ -51,6 +54,38 @@ interface GapEntry {
   gap: number;
   meets_grade: boolean;
   is_critical: boolean;
+}
+
+function evaluateEmployeeCefr(empTargetGradeLevel: number, cefrRecord?: any) {
+  const orgKey = gradeLevelToOrgLevelKey(empTargetGradeLevel ?? 2);
+  const cefrExpected = DEFAULT_CEFR_CONFIG.orgLevels[orgKey]?.expectedCefr ?? 'B2';
+
+  if (!cefrRecord || !cefrRecord.ratings || cefrRecord.ratings.length === 0) {
+    return {
+      cefrLevel: 'B1' as CefrLevelCode,
+      cefrExpected,
+      isCefrGated: true,
+      isCefrReady: false,
+    };
+  }
+
+  const ratingsInput: RatingInput[] = cefrRecord.ratings.map((r: any) => ({
+    competencyKey: r.competency_key,
+    cefr: r.cefr as CefrLevelCode,
+    evidence: r.evidence,
+  }));
+
+  const evaluation = assess(DEFAULT_CEFR_CONFIG, orgKey, ratingsInput);
+  const cefrLevel = evaluation.overallCefr ?? 'B1';
+  const isCefrReady = evaluation.communicationReady ?? false;
+  const isCefrGated = !isCefrReady;
+
+  return {
+    cefrLevel,
+    cefrExpected,
+    isCefrGated,
+    isCefrReady,
+  };
 }
 
 // ── 1. Gap Analysis ───────────────────────────────────────────────────────────
@@ -144,6 +179,14 @@ export async function promotionReadiness(userId: number, managerId: number, role
   // Read stored competency scores for all employees at once
   const storedScores = await getStoredCompScores(employeeIds);
 
+  const cefrAssessments = await db.commAssessment.findMany({
+    where: { employee_id: { in: employeeIds }, status: 'approved' },
+    orderBy: { assessed_at: 'desc' },
+    distinct: ['employee_id'],
+    include: { ratings: true },
+  });
+  const cefrMap = new Map(cefrAssessments.map((a) => [a.employee_id, a]));
+
   const results = [];
 
   for (const emp of employees) {
@@ -151,7 +194,7 @@ export async function promotionReadiness(userId: number, managerId: number, role
 
     // Domain scores = avg of scored competencies, weighted by grade
     const domainScores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
-    const overall_score = weightedOverall(domainScores, domainWeightMap.get(emp.target_grade_id));
+    const overall_score = Number((weightedOverall(domainScores, domainWeightMap.get(emp.target_grade_id)) * 100).toFixed(1));
 
     const thresholds = getGradeThresholdMap(gradeThresholds, emp.department_id, emp.target_grade_id);
     const thresholdMap = buildCompetencyThresholdMap(allCompetencies, thresholds);
@@ -162,6 +205,8 @@ export async function promotionReadiness(userId: number, managerId: number, role
       promotionReady: promotion_ready,
     } = buildThresholdStats(allCompetencies, compScoreMap, thresholdMap);
 
+    const cefrEval = evaluateEmployeeCefr(emp.target_grade?.level ?? 2, cefrMap.get(emp.id));
+
     results.push({
       ...buildReportEmployeeSummary(emp),
       overall_score,
@@ -169,6 +214,9 @@ export async function promotionReadiness(userId: number, managerId: number, role
       meets_count,
       total_competencies: threshold_count,   // only competencies with defined thresholds for this target grade
       promotion_ready,
+      cefr_level: cefrEval.cefrLevel,
+      cefr_expected: cefrEval.cefrExpected,
+      is_cefr_gated: cefrEval.isCefrGated,
       star_rating: scoreToPromotionStarRating(overall_score),
     });
   }
@@ -196,7 +244,7 @@ export async function competencyScores(userId: number, managerId: number, role: 
   for (const emp of employees) {
     const compScoreMap = storedScores.get(emp.id) ?? new Map<number, number>();
     const domain_scores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
-    const overall_score = weightedOverall(domain_scores, domainWeightMap.get(emp.target_grade_id));
+    const overall_score = Number((weightedOverall(domain_scores, domainWeightMap.get(emp.target_grade_id)) * 100).toFixed(1));
 
     results.push({
       ...buildReportEmployeeSummaryWithGradeTitles(emp),
@@ -463,15 +511,27 @@ export async function getExecutiveSummaryReport(userId: number, managerId: numbe
   });
   const cefrMap = new Map(cefrAssessments.map((a) => [a.employee_id, a]));
 
+  let cefrAssessedCount = 0;
+  let cefrCurrentReadyCount = 0;
+
   for (const emp of employees) {
     const compScoreMap = storedScores.get(emp.id) ?? new Map<number, number>();
     const domainScores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
-    const finalTechScore = weightedOverall(domainScores, domainWeightMap.get(emp.target_grade_id));
+    const finalTechScore = Number((weightedOverall(domainScores, domainWeightMap.get(emp.target_grade_id)) * 100).toFixed(1));
 
     totalTechScoreSum += finalTechScore;
 
-    const cefr = cefrMap.get(emp.id);
-    const isCefrReady = cefr ? cefr.status === 'approved' : false;
+    const cefrAssessment = cefrMap.get(emp.id);
+    if (cefrAssessment) {
+      cefrAssessedCount++;
+      const currentGradeEval = evaluateEmployeeCefr(emp.current_grade?.level ?? 2, cefrAssessment);
+      if (currentGradeEval.isCefrReady) {
+        cefrCurrentReadyCount++;
+      }
+    }
+
+    const cefrEval = evaluateEmployeeCefr(emp.target_grade?.level ?? 2, cefrAssessment);
+    const isCefrReady = cefrEval.isCefrReady;
     if (isCefrReady) cefrReadyCount++;
 
     if (finalTechScore >= 80 && isCefrReady) {
@@ -489,19 +549,41 @@ export async function getExecutiveSummaryReport(userId: number, managerId: numbe
   const empCount = employees.length || 1;
   const overallOrgScore = Number((totalTechScoreSum / empCount).toFixed(1));
   const cefrReadyRate = Number(((cefrReadyCount / empCount) * 100).toFixed(1));
+  const cefrCurrentReadyRate = cefrAssessedCount > 0
+    ? Number(((cefrCurrentReadyCount / cefrAssessedCount) * 100).toFixed(1))
+    : 0;
 
-  const departmentBreakdown = Array.from(deptMap.entries()).map(([department, stats]) => ({
-    department,
-    headcount: stats.count,
-    avgTechScore: Number((stats.techScoreSum / (stats.count || 1)).toFixed(1)),
-    cefrReadyRate: Number(((stats.cefrReadyCount / (stats.count || 1)) * 100).toFixed(1)),
-  }));
+  const departmentBreakdown = Array.from(deptMap.entries()).map(([department, stats]) => {
+    const avgTechScore = Number((stats.techScoreSum / (stats.count || 1)).toFixed(1));
+    const cefrReadyRate = Number(((stats.cefrReadyCount / (stats.count || 1)) * 100).toFixed(1));
+    const expectedTechScore = 80.0;
+    const expectedCefrReadyRate = 100.0;
+    const techGap = Number((avgTechScore - expectedTechScore).toFixed(1));
+    const cefrGap = Number((cefrReadyRate - expectedCefrReadyRate).toFixed(1));
+
+    return {
+      department,
+      headcount: stats.count,
+      avgTechScore,
+      expectedTechScore,
+      cefrReadyRate,
+      expectedCefrReadyRate,
+      techGap,
+      cefrGap,
+    };
+  });
 
   return {
     kpis: {
       totalEmployees: employees.length,
       overallOrgScore,
+      expectedOrgScore: 80.0,
       cefrReadyRate,
+      expectedCefrRate: 100.0,
+      cefrAssessedCount,
+      cefrPendingCount: employees.length - cefrAssessedCount,
+      cefrCurrentReadyCount,
+      cefrCurrentReadyRate,
       promotionReadyCount,
     },
     departmentBreakdown,
@@ -534,12 +616,12 @@ export async function getCombinedTalentMatrixReport(userId: number, managerId: n
   for (const emp of employees) {
     const compScoreMap = storedScores.get(emp.id) ?? new Map<number, number>();
     const domain_scores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
-    const techScore = weightedOverall(domain_scores, domainWeightMap.get(emp.target_grade_id));
+    const techScore = Number((weightedOverall(domain_scores, domainWeightMap.get(emp.target_grade_id)) * 100).toFixed(1));
 
-    const cefr = cefrMap.get(emp.id);
-    const cefrLevel = cefr ? 'B2' : 'B1';
-    const cefrExpected = 'B2';
-    const isCefrGated = cefrLevel < cefrExpected;
+    const cefrEval = evaluateEmployeeCefr(emp.target_grade?.level ?? 2, cefrMap.get(emp.id));
+    const cefrLevel = cefrEval.cefrLevel;
+    const cefrExpected = cefrEval.cefrExpected;
+    const isCefrGated = cefrEval.isCefrGated;
 
     let overallStatus: 'READY' | 'GATED' | 'BELOW' = 'BELOW';
     if (techScore >= 80 && !isCefrGated) {
@@ -570,26 +652,84 @@ export async function getMultiYearYoYGrowthReport(userId: number, managerId: num
 
   const periods = await db.appraisalPeriod.findMany({
     orderBy: { calendar_year: 'asc' },
-    take: 3,
   });
 
   const employees = await getEmployeesForManager(userId, managerId, role);
   const employeeIds = employees.map((e) => e.id);
 
-  const storedScores = await getStoredCompScores(employeeIds);
   const { allCompetencies, domainNames } = await loadReportSkillContext();
 
-  const results = employees.map((emp) => {
-    const compScoreMap = storedScores.get(emp.id) ?? new Map<number, number>();
-    const domain_scores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
-    const currentScore = weightedOverall(domain_scores, undefined);
+  // Query approved skill assessments grouped by employee and appraisal_period_id
+  const periodAssessments = await db.skillAssessment.findMany({
+    where: {
+      employee_id: { in: employeeIds },
+      status: 'approved',
+      appraisal_period_id: { not: null },
+    },
+    select: {
+      employee_id: true,
+      appraisal_period_id: true,
+      score: true,
+      technology: {
+        select: {
+          competency_id: true,
+        },
+      },
+    },
+  });
 
-    const periodScores: Record<string, number> = {};
-    periods.forEach((p, idx) => {
-      // Simulate historical trend baseline for multi-year tracking
-      const baseFactor = 0.85 + idx * 0.075;
-      periodScores[p.code] = Number((currentScore * baseFactor).toFixed(1));
+  // Map: [empId, periodId] => Map<competencyId, score>
+  const empPeriodCompScores = new Map<string, Map<number, number>>();
+  for (const pa of periodAssessments) {
+    if (!pa.appraisal_period_id || !pa.technology?.competency_id) continue;
+    const key = `${pa.employee_id}:${pa.appraisal_period_id}`;
+    if (!empPeriodCompScores.has(key)) {
+      empPeriodCompScores.set(key, new Map<number, number>());
+    }
+    const compMap = empPeriodCompScores.get(key)!;
+    const compId = pa.technology.competency_id;
+    const currentScore = compMap.get(compId) ?? 0;
+    compMap.set(compId, currentScore + Number(pa.score ?? 0));
+  }
+
+  const storedScores = await getStoredCompScores(employeeIds);
+
+  // Identify periods that actually contain stored assessment data
+  const periodHasDataMap = new Map<number, boolean>();
+  for (const p of periods) {
+    const hasDbAssessments = periodAssessments.some((pa) => pa.appraisal_period_id === p.id);
+    const hasStoredScores = p.is_active && Array.from(storedScores.values()).some((map) => map.size > 0);
+    periodHasDataMap.set(p.id, hasDbAssessments || hasStoredScores);
+  }
+
+  // Filter periods to only those with authentic database data
+  const activePeriodsWithData = periods.filter((p) => periodHasDataMap.get(p.id));
+  const targetPeriods = activePeriodsWithData.length > 0 ? activePeriodsWithData : periods;
+
+  const results = employees.map((emp) => {
+    const periodScores: Record<string, number | null> = {};
+
+    targetPeriods.forEach((p) => {
+      const key = `${emp.id}:${p.id}`;
+      let compMap = empPeriodCompScores.get(key);
+      if (!compMap || compMap.size === 0) {
+        if (p.is_active) {
+          compMap = storedScores.get(emp.id);
+        }
+      }
+
+      if (compMap && compMap.size > 0) {
+        const domain_scores = buildDomainScores(compMap, allCompetencies, domainNames, emp.department_id);
+        const score = weightedOverall(domain_scores, undefined);
+        periodScores[p.code] = Number(score.toFixed(1));
+      } else {
+        periodScores[p.code] = null;
+      }
     });
+
+    const currentScoreMap = storedScores.get(emp.id) ?? new Map<number, number>();
+    const currentDomainScores = buildDomainScores(currentScoreMap, allCompetencies, domainNames, emp.department_id);
+    const currentScore = weightedOverall(currentDomainScores, undefined);
 
     return {
       ...buildReportEmployeeSummary(emp),
@@ -598,6 +738,6 @@ export async function getMultiYearYoYGrowthReport(userId: number, managerId: num
     };
   });
 
-  return { periods: periods.map((p) => p.code), employees: results };
+  return { periods: targetPeriods.map((p) => p.code), employees: results };
 }
 
