@@ -272,9 +272,10 @@ export const configService = {
     }
   },
 
-  async listRoles() {
+  async listRoles(onlyActive = true) {
     await this.ensurePermissions();
     return db.accessRole.findMany({
+      where: onlyActive ? { is_active: true } : undefined,
       include: {
         role_permissions: {
           include: { permission: true },
@@ -957,9 +958,10 @@ export const configService = {
   },
 
   // ── Users ──────────────────────────────────────────────────────────────────
-  async listUsers() {
+  async listUsers(onlyActive = true) {
     await this.ensureRoles();
     return db.user.findMany({
+      where: onlyActive ? { is_active: true } : undefined,
       include: { employee: true, role_ref: true },
       orderBy: { created_at: 'desc' },
     });
@@ -1050,11 +1052,12 @@ export const configService = {
   },
 
   // ── Departments ────────────────────────────────────────────────────────────
-  async listDepartments() {
+  async listDepartments(onlyActive = true) {
     return db.department.findMany({
+      where: onlyActive ? { is_active: true } : undefined,
       include: {
         organization: true,
-        employees: { where: { deleted_at: null }, select: { id: true } },
+        employees: { where: { deleted_at: null, is_active: true }, select: { id: true } },
         config: true,
         domain_weights: { include: { domain: true } },
       },
@@ -1135,9 +1138,9 @@ export const configService = {
   },
 
   // ── Employees ──────────────────────────────────────────────────────────────
-  async listEmployees() {
+  async listEmployees(onlyActive = true) {
     return db.employee.findMany({
-      where: { deleted_at: null },
+      where: onlyActive ? { deleted_at: null, is_active: true } : undefined,
       include: {
         current_grade: true,
         target_grade: true,
@@ -1386,12 +1389,13 @@ export const configService = {
   },
 
   // ── Competencies ───────────────────────────────────────────────────────────
-  async listCompetencies() {
+  async listCompetencies(onlyActive = true) {
     return db.competency.findMany({
+      where: onlyActive ? { is_active: true } : undefined,
       include: {
         competency_category: true,
         competency_domains: { include: { domain: true } },
-        technologies: true,
+        technologies: { where: onlyActive ? { is_active: true } : undefined },
       },
       orderBy: { name: 'asc' },
     });

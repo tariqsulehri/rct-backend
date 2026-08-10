@@ -10,10 +10,51 @@ type ReportDepartmentEmployee = {
   department_id: number | null;
 };
 
+function getCanonicalCompName(name: string): string {
+  const n = name.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (n.includes('automation') && n.includes('scripting')) return 'automation & scripting';
+  if (n === 'iac' || n.includes('infrastructureascode')) return 'infrastructure as code';
+  if (n.includes('multicloud')) return 'multi-cloud strategy';
+  if (n.includes('incidentmanagement')) return 'incident management';
+  if (n.includes('errorbudgets')) return 'error budgets & slos';
+  if (n.includes('reliability') && n.includes('performance')) return 'reliability & performance';
+  return n;
+}
+
 export async function loadReportSkillContext() {
-  const allCompetencies = await db.competency.findMany({
+  const rawCompetencies = await db.competency.findMany({
     include: { competency_domains: { include: { domain: true } } },
   });
+
+  const scoreCounts = await db.competencyScore.groupBy({
+    by: ['competency_id'],
+    _count: { _all: true },
+  });
+  const scoreCountMap = new Map(scoreCounts.map((sc) => [sc.competency_id, sc._count._all]));
+
+  const matrixCounts = await db.gradeMatrix.groupBy({
+    by: ['competency_id'],
+    _count: { _all: true },
+  });
+  const matrixCountMap = new Map(matrixCounts.map((mc) => [mc.competency_id, mc._count._all]));
+
+  const compGroupMap = new Map<string, typeof rawCompetencies>();
+  for (const c of rawCompetencies) {
+    const key = getCanonicalCompName(c.name);
+    if (!compGroupMap.has(key)) compGroupMap.set(key, []);
+    compGroupMap.get(key)!.push(c);
+  }
+
+  const allCompetencies = Array.from(compGroupMap.values()).map((group) => {
+    group.sort((a, b) => {
+      const aWeight = (scoreCountMap.get(a.id) ?? 0) * 10 + (matrixCountMap.get(a.id) ?? 0);
+      const bWeight = (scoreCountMap.get(b.id) ?? 0) * 10 + (matrixCountMap.get(b.id) ?? 0);
+      if (bWeight !== aWeight) return bWeight - aWeight;
+      return a.id - b.id;
+    });
+    return group[0];
+  });
+
   const competencyById = new Map(allCompetencies.map((competency) => [competency.id, competency]));
   const allDomains = await db.skillDomain.findMany({ orderBy: { name: 'asc' } });
   const domainNames = allDomains.map((d) => d.name);
@@ -138,12 +179,13 @@ export async function getEmployeesForManager(
       where: {
         id: { in: scopedIds },
         deleted_at: null,
+        is_active: true,
       },
       include: { current_grade: true, target_grade: true, dept: true },
     });
   }
   return db.employee.findMany({
-    where: { id: { in: scopedIds }, deleted_at: null },
+    where: { id: { in: scopedIds }, deleted_at: null, is_active: true },
     include: { current_grade: true, target_grade: true, dept: true },
   });
 }
