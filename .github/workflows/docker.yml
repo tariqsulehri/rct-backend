@@ -41,12 +41,20 @@ jobs:
         run: npm run lint
 
       - name: Type check
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy_db"
         run: npm run type-check
 
       - name: Test
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy_db"
+          JWT_SECRET: "ci-dummy-jwt-secret-key-32-characters-min"
+          REFRESH_TOKEN_SECRET: "ci-dummy-refresh-token-secret-key-32"
         run: npm run test -- --runInBand
 
       - name: Build app
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy_db"
         run: npm run build
 
   docker:
