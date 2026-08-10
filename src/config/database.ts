@@ -14,10 +14,17 @@ if (process.env.NODE_ENV === 'production') {
   prisma = globalForPrisma.prisma;
 }
 
-// Log connection
-prisma.$connect().then(() => {
-  logger.info('✅ Database connected');
-});
+// Log connection (deferred during unit test execution)
+if (process.env.NODE_ENV !== 'test') {
+  prisma
+    .$connect()
+    .then(() => {
+      logger.info('✅ Database connected');
+    })
+    .catch((err) => {
+      logger.warn({ err }, 'Prisma initial connection deferred');
+    });
+}
 
 // Handle disconnection gracefully
 process.on('SIGINT', async () => {
