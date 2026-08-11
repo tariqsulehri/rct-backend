@@ -874,13 +874,16 @@ export const configService = {
 
   // ── Assessment Types ──────────────────────────────────────────────────────
   async ensureAssessmentTypeConfigs() {
-    await Promise.all(DEFAULT_ASSESSMENT_TYPE_CONFIGS.map((type) =>
-      db.assessmentTypeConfig.upsert({
-        where: { code: type.code },
-        create: type,
-        update: { label: type.label, description: type.description, sort_order: type.sort_order },
-      })
-    ));
+    const count = await db.assessmentTypeConfig.count();
+    if (count === 0) {
+      await Promise.all(DEFAULT_ASSESSMENT_TYPE_CONFIGS.map((type) =>
+        db.assessmentTypeConfig.upsert({
+          where: { code: type.code },
+          create: type,
+          update: { label: type.label, description: type.description, sort_order: type.sort_order },
+        })
+      ));
+    }
   },
 
   async listAssessmentTypeConfigs() {
@@ -895,17 +898,20 @@ export const configService = {
   },
 
   async ensureAssessmentLevelConfigs() {
-    await db.assessmentLevelConfig.deleteMany({
-      where: { code: 'Foundational' },
-    });
+    const count = await db.assessmentLevelConfig.count();
+    if (count === 0) {
+      await db.assessmentLevelConfig.deleteMany({
+        where: { code: 'Foundational' },
+      });
 
-    await Promise.all(DEFAULT_ASSESSMENT_LEVEL_CONFIGS.map((level) =>
-      db.assessmentLevelConfig.upsert({
-        where: { code: level.code },
-        create: level,
-        update: { label: level.label, description: level.description, sort_order: level.sort_order, is_active: level.is_active },
-      })
-    ));
+      await Promise.all(DEFAULT_ASSESSMENT_LEVEL_CONFIGS.map((level) =>
+        db.assessmentLevelConfig.upsert({
+          where: { code: level.code },
+          create: level,
+          update: { label: level.label, description: level.description, sort_order: level.sort_order },
+        })
+      ));
+    }
   },
 
   async listAssessmentLevelConfigs() {
@@ -920,13 +926,16 @@ export const configService = {
   },
 
   async ensureAssessmentStatusConfigs() {
-    await Promise.all(DEFAULT_ASSESSMENT_STATUS_CONFIGS.map((status) =>
-      db.assessmentStatusConfig.upsert({
-        where: { code: status.code },
-        create: status,
-        update: { label: status.label, description: status.description, sort_order: status.sort_order },
-      })
-    ));
+    const count = await db.assessmentStatusConfig.count();
+    if (count === 0) {
+      await Promise.all(DEFAULT_ASSESSMENT_STATUS_CONFIGS.map((status) =>
+        db.assessmentStatusConfig.upsert({
+          where: { code: status.code },
+          create: status,
+          update: { label: status.label, description: status.description, sort_order: status.sort_order },
+        })
+      ));
+    }
   },
 
   async listAssessmentStatusConfigs() {
@@ -941,13 +950,16 @@ export const configService = {
   },
 
   async ensureAssessmentProjectConfigs() {
-    await Promise.all(DEFAULT_ASSESSMENT_PROJECT_CONFIGS.map((project) =>
-      db.assessmentProjectConfig.upsert({
-        where: { project_count: project.project_count },
-        create: project,
-        update: { label: project.label, description: project.description, sort_order: project.sort_order },
-      })
-    ));
+    const count = await db.assessmentProjectConfig.count();
+    if (count === 0) {
+      await Promise.all(DEFAULT_ASSESSMENT_PROJECT_CONFIGS.map((project) =>
+        db.assessmentProjectConfig.upsert({
+          where: { project_count: project.project_count },
+          create: project,
+          update: { label: project.label, description: project.description, sort_order: project.sort_order },
+        })
+      ));
+    }
   },
 
   async listAssessmentProjectConfigs() {
