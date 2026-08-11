@@ -160,7 +160,19 @@ export const behavioralService = {
   },
 
   /**
-   * Creates a new behavioral assessment and evaluates deterministic result
+   * Creates a new behavioral assessment and evaluates deterministic result.
+   *
+   * @summary Create behavioral assessment evaluation.
+   * @param data - Validated behavioral assessment ratings input.
+   * @param assessorId - Assessor's ID string or code.
+   *
+   * @returns Newly created BehavAssessment database object with computed engine results.
+   * @throws {Error} If grade key is invalid or subject employee is missing.
+   *
+   * @security Must be conducted by an assigned Line Manager, Manager, or Administrator. Engineer self-evaluations are forbidden.
+   * @transactional Atomically creates BehavAssessment, BehavRating, and BehavResult rows.
+   *
+   * @see documentation/specifications/11-domain-engines/03-behavioral-competency/README.md
    */
   async createAssessment(data: CreateBehavioralAssessmentInput, assessorId?: string) {
     const config = await this.getConfig();

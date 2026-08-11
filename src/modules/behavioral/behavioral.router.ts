@@ -13,10 +13,10 @@ router.get('/config', behavioralController.getConfig);
 // Authenticated endpoints
 router.use(authenticate);
 
-// Create behavioral assessment (Managers, Line Managers, Admins, Top Management, Engineers)
+// Create behavioral assessment (Line Managers, Managers, Admins, Top Management)
 router.post(
   '/assessments',
-  requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN', 'TOP_MANAGEMENT', 'ENGINEER'),
+  requireRole('MANAGER', 'LINE_MANAGER', 'ADMIN', 'TOP_MANAGEMENT'),
   validate(createBehavioralAssessmentSchema),
   behavioralController.createAssessment
 );
