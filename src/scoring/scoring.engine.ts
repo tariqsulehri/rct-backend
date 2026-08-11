@@ -35,6 +35,7 @@ export const LEVEL_WEIGHT: Record<string, number> = {
   Expert: 1.0,
   Advanced: 0.8,
   Proficient: 0.6,
+  Intermediate: 0.4,
   Foundational: 0.4,
   Beginner: 0.4,
   Awareness: 0.2,

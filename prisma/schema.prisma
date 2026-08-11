@@ -701,3 +701,92 @@ model CommRating {
   @@map("comm_ratings")
 }
 
+// ============================================================================
+// BEHAVIORAL COMPETENCY FRAMEWORK
+// ============================================================================
+
+model BehavLevel {
+  code         String @id
+  ordinal      Int    @db.SmallInt
+  centi_weight Int    @db.SmallInt
+  label        String
+
+  expected_matrix BehavExpected[]
+  ratings         BehavRating[]
+
+  @@map("behav_level")
+}
+
+model BehavCompetency {
+  key  String @id
+  name String
+  type String // 'core' | 'leadership'
+  sort Int    @db.SmallInt
+
+  expected_matrix BehavExpected[]
+  ratings         BehavRating[]
+
+  @@map("behav_competency")
+}
+
+model BehavGrade {
+  key     String @id
+  ordinal Int    @db.SmallInt
+  name    String
+
+  expected_matrix BehavExpected[]
+  assessments     BehavAssessment[]
+
+  @@map("behav_grade")
+}
+
+model BehavExpected {
+  grade_key      String
+  competency_key String
+  level          String
+
+  grade      BehavGrade      @relation(fields: [grade_key], references: [key], onDelete: Cascade)
+  competency BehavCompetency @relation(fields: [competency_key], references: [key], onDelete: Cascade)
+  level_ref  BehavLevel      @relation(fields: [level], references: [code], onDelete: Cascade)
+
+  @@id([grade_key, competency_key])
+  @@index([grade_key])
+  @@index([competency_key])
+  @@index([level])
+  @@map("behav_expected")
+}
+
+model BehavAssessment {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject_id  String
+  grade_key   String
+  assessed_at DateTime @default(now()) @db.Timestamptz(6)
+  assessor_id String?
+
+  grade   BehavGrade    @relation(fields: [grade_key], references: [key], onDelete: Restrict)
+  ratings BehavRating[]
+
+  @@index([subject_id])
+  @@index([grade_key])
+  @@index([assessed_at])
+  @@map("behav_assessment")
+}
+
+model BehavRating {
+  assessment_id  String  @db.Uuid
+  competency_key String
+  level          String
+  evidence       String? @db.Text
+
+  assessment BehavAssessment @relation(fields: [assessment_id], references: [id], onDelete: Cascade)
+  competency BehavCompetency @relation(fields: [competency_key], references: [key], onDelete: Restrict)
+  level_ref  BehavLevel      @relation(fields: [level], references: [code], onDelete: Restrict)
+
+  @@id([assessment_id, competency_key])
+  @@index([assessment_id])
+  @@index([competency_key])
+  @@index([level])
+  @@map("behav_rating")
+}
+
+

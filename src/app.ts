@@ -11,6 +11,7 @@ import configRouter from './modules/config/config.router';
 import reportsRouter from './modules/reports/reports.router';
 import aiRouter from './modules/ai/ai.router';
 import communicationRouter from './modules/communication/communication.router';
+import behavioralRouter from './modules/behavioral/behavioral.router';
 
 /**
  * Create and configure Express application
@@ -88,6 +89,8 @@ export function createApp(): Express {
   app.use('/api/v1/reports', reportsRouter);
   app.use('/api/v1/ai', aiRouter);
   app.use('/api/v1/comm', communicationRouter);
+  app.use('/api/v1/behav', behavioralRouter);
+
 
   // ============================================================================
   // 404 HANDLER

@@ -977,6 +977,80 @@ async function main() {
     console.log(`  ✅ ${period.code} (${period.name}) - [${period.status}]`);
   }
 
+  // ── 10. Behavioral Competency Reference Data ─────────────────────────────────
+  console.log('\n🧠 Seeding Behavioral Competency Reference Data...');
+  const BEHAV_LEVELS = [
+    { code: 'L1', ordinal: 1, centi_weight: 20,  label: 'Intermediate' },
+    { code: 'L2', ordinal: 2, centi_weight: 40,  label: 'Proficient' },
+    { code: 'L3', ordinal: 3, centi_weight: 60,  label: 'Advanced' },
+    { code: 'L4', ordinal: 4, centi_weight: 80,  label: 'Leads' },
+    { code: 'L5', ordinal: 5, centi_weight: 100, label: 'Strategic' },
+  ];
+  for (const lvl of BEHAV_LEVELS) {
+    await prisma.behavLevel.upsert({
+      where: { code: lvl.code },
+      update: lvl,
+      create: lvl,
+    });
+  }
+
+  const BEHAV_COMPETENCIES = [
+    { key: 'ownership',         name: 'Ownership & Accountability', type: 'core',       sort: 1 },
+    { key: 'collaboration',     name: 'Collaboration & Influence',  type: 'core',       sort: 2 },
+    { key: 'customer_business', name: 'Customer & Business Focus',   type: 'core',       sort: 3 },
+    { key: 'communication',     name: 'Communication',              type: 'core',       sort: 4 },
+    { key: 'adaptability',      name: 'Adaptability & Learning',     type: 'core',       sort: 5 },
+    { key: 'integrity',         name: 'Integrity & Judgment',        type: 'core',       sort: 6 },
+    { key: 'develops_people',   name: 'Develops People',            type: 'leadership', sort: 7 },
+    { key: 'strategic_thinking', name: 'Strategic Thinking',         type: 'leadership', sort: 8 },
+    { key: 'drives_change',     name: 'Drives Change',              type: 'leadership', sort: 9 },
+    { key: 'decision_making',   name: 'Decision-Making',            type: 'leadership', sort: 10 },
+    { key: 'builds_teams',      name: 'Builds & Leads Teams',       type: 'leadership', sort: 11 },
+  ];
+  for (const comp of BEHAV_COMPETENCIES) {
+    await prisma.behavCompetency.upsert({
+      where: { key: comp.key },
+      update: comp,
+      create: comp,
+    });
+  }
+
+  const BEHAV_GRADES = [
+    { key: 'G13', ordinal: 1, name: 'Associate' },
+    { key: 'G14', ordinal: 2, name: 'Engineer' },
+    { key: 'G15', ordinal: 3, name: 'Senior' },
+    { key: 'G16', ordinal: 4, name: 'Principal' },
+    { key: 'G17', ordinal: 5, name: 'Associate Architect' },
+  ];
+  for (const g of BEHAV_GRADES) {
+    await prisma.behavGrade.upsert({
+      where: { key: g.key },
+      update: g,
+      create: g,
+    });
+  }
+
+  const EXPECTED_MATRIX: Record<string, Record<string, string>> = {
+    G13: { ownership: 'L1', collaboration: 'L1', customer_business: 'L1', communication: 'L2', adaptability: 'L1', integrity: 'L3' },
+    G14: { ownership: 'L2', collaboration: 'L2', customer_business: 'L2', communication: 'L2', adaptability: 'L2', integrity: 'L3' },
+    G15: { ownership: 'L3', collaboration: 'L3', customer_business: 'L3', communication: 'L3', adaptability: 'L3', integrity: 'L4' },
+    G16: { ownership: 'L4', collaboration: 'L4', customer_business: 'L4', communication: 'L4', adaptability: 'L3', integrity: 'L4', develops_people: 'L3', strategic_thinking: 'L3', drives_change: 'L3', decision_making: 'L3', builds_teams: 'L3' },
+    G17: { ownership: 'L5', collaboration: 'L5', customer_business: 'L5', communication: 'L4', adaptability: 'L4', integrity: 'L5', develops_people: 'L4', strategic_thinking: 'L4', drives_change: 'L4', decision_making: 'L4', builds_teams: 'L4' },
+  };
+
+  for (const [gradeKey, compMap] of Object.entries(EXPECTED_MATRIX)) {
+    for (const [compKey, levelCode] of Object.entries(compMap)) {
+      await prisma.behavExpected.upsert({
+        where: {
+          grade_key_competency_key: { grade_key: gradeKey, competency_key: compKey },
+        },
+        update: { level: levelCode },
+        create: { grade_key: gradeKey, competency_key: compKey, level: levelCode },
+      });
+    }
+  }
+  console.log(`  ✅ ${BEHAV_LEVELS.length} Levels, ${BEHAV_COMPETENCIES.length} Competencies, ${BEHAV_GRADES.length} Grades, Expected Matrix populated.`);
+
   console.log(`
 ✅ Seed complete!
    Grades:                ${GRADES.length}
@@ -988,6 +1062,7 @@ async function main() {
    Employees:             ${EMPLOYEES.length}
    Users:                 4  (password: password123)
    Appraisal Periods:     ${APPRAISAL_PERIODS.length}  (CY2024, CY2025, CY2026)
+   Behavioral Framework:  ${BEHAV_COMPETENCIES.length} Competencies across ${BEHAV_GRADES.length} Grades
   `);
 }
 

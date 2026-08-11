@@ -71,7 +71,7 @@ const DEFAULT_ASSESSMENT_LEVEL_CONFIGS = [
   { code: 'Expert', label: 'Expert', weight: 1.00, threshold: 0.80, description: 'Base score multiplies skill score; minimum target shows the expected skill level. Example: 1.00 Base score, 0.80 target.', sort_order: 1, is_active: true },
   { code: 'Advanced', label: 'Advanced', weight: 0.80, threshold: 0.60, description: 'Base score multiplies skill score; minimum target shows the expected skill level. Example: 0.80 Base score, 0.60 target.', sort_order: 2, is_active: true },
   { code: 'Proficient', label: 'Proficient', weight: 0.60, threshold: 0.40, description: 'Base score multiplies skill score; minimum target shows the expected skill level. Example: 0.60 Base score, 0.40 target.', sort_order: 3, is_active: true },
-  { code: 'Foundational', label: 'Foundational', weight: 0.40, threshold: 0.20, description: 'Base score multiplies skill score; minimum target shows the expected skill level. Example: 0.40 Base score, 0.20 target.', sort_order: 4, is_active: true },
+  { code: 'Intermediate', label: 'Intermediate', weight: 0.40, threshold: 0.20, description: 'Base score multiplies skill score; minimum target shows the expected skill level. Example: 0.40 Base score, 0.20 target.', sort_order: 4, is_active: true },
   { code: 'Beginner', label: 'Beginner', weight: 0.40, threshold: 0.20, description: 'Base score multiplies skill score; minimum target shows the expected skill level. Example: 0.40 Base score, 0.20 target.', sort_order: 5, is_active: true },
   { code: 'Awareness', label: 'Awareness', weight: 0.20, threshold: 0.01, description: 'Base score gives light score; minimum target marks basic recognition. Example: 0.20 Base score, 0.01 target.', sort_order: 6, is_active: true },
   { code: 'Unset', label: 'Unset', weight: 0.00, threshold: 0.00, description: 'No selected level. Base score 0.00 means it adds no score; minimum target 0.00 means no target.', sort_order: 7, is_active: true },
@@ -895,11 +895,15 @@ export const configService = {
   },
 
   async ensureAssessmentLevelConfigs() {
+    await db.assessmentLevelConfig.deleteMany({
+      where: { code: 'Foundational' },
+    });
+
     await Promise.all(DEFAULT_ASSESSMENT_LEVEL_CONFIGS.map((level) =>
       db.assessmentLevelConfig.upsert({
         where: { code: level.code },
         create: level,
-        update: { label: level.label, description: level.description, sort_order: level.sort_order },
+        update: { label: level.label, description: level.description, sort_order: level.sort_order, is_active: level.is_active },
       })
     ));
   },
