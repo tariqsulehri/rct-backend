@@ -82,6 +82,12 @@ export class CommunicationService {
     return this.config;
   }
 
+  /**
+   * Resolves employee database record by internal integer ID or public string `emp_code`.
+   *
+   * @param identifier - Numeric employee ID or string employee code (e.g. 'EMP001').
+   * @returns Employee record with `current_grade` included or null.
+   */
   async resolveEmployee(identifier: string | number) {
     const isNum = typeof identifier === 'number' || /^\d+$/.test(String(identifier).trim());
     const employee = await db.employee.findFirst({
@@ -101,6 +107,30 @@ export class CommunicationService {
     return employee;
   }
 
+  /**
+   * Creates a new CEFR communication evaluation record in the database.
+   *
+   * Workflow:
+   *   1. Resolves employee and maps grade level to CEFR org level key.
+   *   2. Validates 6 communication competencies against CEFR engine rules.
+   *   3. Enforces active submission window period validation.
+   *   4. Persists assessment row, competency ratings, and summary snapshot in an atomic transaction.
+   *
+   * @summary Create CEFR communication evaluation record.
+   *
+   * @param data - Validated CEFR assessment input.
+   * @param assessorUserId - Assessor's user ID.
+   * @param isEngineer - Flag indicating if request originated from an engineer (auto-sets pending).
+   *
+   * @returns FormattedCommAssessmentResponse structure with engine scores and status.
+   *
+   * @throws {Error} If employee code is missing or ratings violate CEFR engine rules.
+   *
+   * @security Assessor must be ADMIN or LINE_MANAGER of target employee.
+   * @transactional Atomically commits CommAssessment, CommAssessmentRating, and CommAssessmentSummary rows.
+   *
+   * @see documentation/specifications/07-api/api-contracts.md
+   */
   async createAssessment(
     data: CreateCommAssessmentRequest,
     assessorUserId?: number | null,

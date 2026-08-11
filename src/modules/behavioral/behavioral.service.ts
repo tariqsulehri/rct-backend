@@ -8,7 +8,10 @@ import { CreateBehavioralAssessmentInput } from './behavioral.schema';
 
 export const behavioralService = {
   /**
-   * Ensures default behavioral framework reference data exists in the database
+   * Seeds default behavioral framework reference data (levels, competencies, grades, expected matrix) if missing.
+   *
+   * @summary Seeds default behavioral competency reference data when DB is empty.
+   * @transactional Upserts default reference rows if `count === 0`.
    */
   async ensureReferenceData(): Promise<void> {
     const levelCount = await db.behavLevel.count();

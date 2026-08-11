@@ -118,7 +118,14 @@ async function assertUniqueCompetencyImportance(
 // ─── Service ──────────────────────────────────────────────────────────────────
 
 export const assessmentService = {
-  /** Lightweight lookup used by the controller for ownership checks. */
+  /**
+   * Lightweight lookup used by controllers for row-level ownership validation.
+   *
+   * @param id - Assessment record internal database ID.
+   * @returns Minimal object containing assessment ID and target employee ID.
+   *
+   * @security Enforces row-level owner verification in HTTP controllers.
+   */
   async findAssessmentById(id: number) {
     return db.skillAssessment.findUnique({
       where: { id },
@@ -126,6 +133,32 @@ export const assessmentService = {
     });
   },
 
+  /**
+   * Creates a new technical skill assessment record and updates the employee's competency scores.
+   *
+   * Workflow:
+   *   1. Resolves `emp_code` to internal Employee.id and verifies submission window.
+   *   2. Enforces importance uniqueness (max 1 Primary, 1 Secondary, 1 Tertiary per competency).
+   *   3. Calculates normalized tool score using scoring values & level weights.
+   *   4. Persists `SkillAssessment` record.
+   *   5. Synchronously recomputes affected `CompetencyScore` entry.
+   *
+   * @summary Create technical skill assessment & refresh competency score.
+   *
+   * @param request - Validated assessment creation input.
+   * @param assessedByEmployeeId - Assessor's internal Employee.id.
+   * @param role - Role of requesting user ('ADMIN' | 'MANAGER' | 'ENGINEER').
+   *
+   * @returns Newly created SkillAssessmentResponse object with computed score preview.
+   *
+   * @throws {NotFoundError} If employee code or target technology is missing (404).
+   * @throws {ConflictError} If duplicate importance tool already exists under competency (409).
+   *
+   * @security Assessor must be ADMIN, LINE_MANAGER of target employee, or self (ENGINEER).
+   * @transactional Creates SkillAssessment row and updates target CompetencyScore.
+   *
+   * @see documentation/specifications/07-api/api-contracts.md
+   */
   async createSkillAssessment(
     request: CreateSkillAssessmentRequest,
     assessedByEmployeeId: number,   // Employee.id (internal) of the assessor

@@ -12,6 +12,8 @@ import {
   createScoringConfigService,
 } from './scoring-config.service';
 
+// ── TYPES & OPTIONS INTERFACES ──────────────────────────────────────────────
+
 type ScoringConfigReader = {
   getScoringConfigBundle: () => Promise<ScoringConfigBundle>;
 };
@@ -21,6 +23,7 @@ type ScoreRecalculationLogger = {
   error?: (obj: unknown, msg?: string) => void;
 };
 
+/** Service creation options for custom config loader or logging */
 type ScoreRecalculationServiceOptions = {
   scoringConfigService?: ScoringConfigReader;
   logger?: ScoreRecalculationLogger;
@@ -37,6 +40,7 @@ type RecomputeOneInput = {
   projectCredits?: ProjectCredits;
 };
 
+/** Result of a single competency score recomputation */
 export type RecomputedCompetencyResult = {
   employeeId: number;
   competencyId: number;
@@ -45,6 +49,7 @@ export type RecomputedCompetencyResult = {
   levelLabel: string | null;
 };
 
+/** Summary result of a full employee score recomputation */
 export type RecomputedEmployeeResult = {
   employeeId: number;
   competencyIds: number[];
@@ -53,6 +58,19 @@ export type RecomputedEmployeeResult = {
   failed?: boolean;
 };
 
+// ── SCORE RECALCULATION SERVICE FACTORY ──────────────────────────────────────
+
+/**
+ * Creates the ScoreRecalculationService instance for orchestrating competency score refreshes.
+ *
+ * @summary Service factory for employee and competency score recomputations.
+ *
+ * @param client - Prisma database client or transaction instance.
+ * @param options - Configuration options for logging and error handling.
+ * @returns Service object exposing `recomputeOneCompetency` and `recomputeScoresForEmployee`.
+ *
+ * @see documentation/backend/scoring-formula.md
+ */
 export function createScoreRecalculationService(
   client: PrismaClient,
   options: ScoreRecalculationServiceOptions = {},
@@ -61,6 +79,16 @@ export function createScoreRecalculationService(
   const swallowErrors = options.swallowErrors ?? false;
   const serviceLogger = options.logger;
 
+  /**
+   * Recomputes and upserts a single `competency_scores` database row for an employee.
+   *
+   * @summary Recomputes single competency score from active technical assessments.
+   *
+   * @param input - Employee ID, competency ID, department, and scoring coefficients.
+   * @returns RecomputedCompetencyResult object containing score, star rating, and level label.
+   *
+   * @transactional Executes an atomic `competencyScore.upsert` operation.
+   */
   const recomputeOneCompetency = async ({
     employeeId,
     competencyId,
@@ -119,6 +147,17 @@ export function createScoreRecalculationService(
     return { employeeId, competencyId, score, starRating, levelLabel };
   };
 
+  /**
+   * Recalculates all competency scores for a specific employee across all assessed and active competencies.
+   *
+   * @summary Bulk recomputes all competency scores for an employee.
+   *
+   * @param employeeId - Employee internal database ID.
+   * @param scoringConfig - Optional pre-fetched scoring configuration bundle.
+   * @returns RecomputedEmployeeResult containing updated count and status.
+   *
+   * @transactional Batch updates `competency_scores` for each evaluated competency.
+   */
   const recomputeScoresForEmployee = async (
     employeeId: number,
     scoringConfig?: ScoringConfigBundle,
@@ -177,3 +216,4 @@ export function createScoreRecalculationService(
     recomputeScoresForEmployee,
   };
 }
+
