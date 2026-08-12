@@ -43,7 +43,7 @@ export async function assertActiveSubmissionWindow(
   });
 
   if (activePeriods.length === 0) {
-    const error = new Error('Assessment submission blocked: No active fiscal evaluation period is currently open for submissions.');
+    const error = new Error('Assessment submission blocked: No active evaluation period is currently open for submissions.');
     throw Object.assign(error, { statusCode: 403, code: 'NO_ACTIVE_PERIOD' });
   }
 
