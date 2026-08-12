@@ -83,4 +83,30 @@ describe('Communication Service & Schema', () => {
       expect(parsed.success).toBe(true);
     });
   });
+
+  describe('Evaluation Formatting Helper', () => {
+    it('formats raw engine evaluation into a complete response structure', () => {
+      const service = communicationService as any;
+      const rawEval = {
+        overallWeight: 0.67,
+        overallCefr: 'B2',
+        overallExpectedWeight: 0.67,
+        overallGap: 0,
+        overallStatus: 'MEETS',
+        perCompetency: [],
+        complete: true,
+        isGated: true,
+        communicationReady: true,
+        developmentPriority: [],
+      };
+
+      const formatted = service.formatEvaluation('senior', rawEval);
+      expect(formatted.overallScore).toBe(0.67);
+      expect(formatted.expectedScore).toBe(0.67);
+      expect(formatted.expectedCefr).toBe('B2');
+      expect(formatted.isComplete).toBe(true);
+      expect(formatted.isPromotionGated).toBe(true);
+      expect(formatted.developmentPriorities).toEqual([]);
+    });
+  });
 });

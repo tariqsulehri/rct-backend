@@ -190,6 +190,8 @@ export class CommunicationService {
       return assessment;
     });
 
+    const evaluationResult = this.formatEvaluation(orgLevelKey, evaluation);
+
     return {
       id: saved.id,
       employee_id: saved.employee_id,
@@ -214,7 +216,30 @@ export class CommunicationService {
         cefr: r.cefr,
         evidence: r.evidence,
       })),
-      evaluation,
+      evaluation: evaluationResult,
+    };
+  }
+
+  /**
+   * Enriches raw CEFR evaluation result with calculated scores and formatted properties.
+   *
+   * @param orgLevelKey - Employee organizational level key.
+   * @param evaluation - Raw engine evaluation output.
+   * @returns Formatted evaluation with backward-compatible overallScore, expectedCefr, etc.
+   */
+  private formatEvaluation(orgLevelKey: string, evaluation: CefrAssessmentResult) {
+    const org = this.config.orgLevels[orgLevelKey];
+    return {
+      ...evaluation,
+      overallScore: evaluation.overallWeight ?? 0,
+      expectedScore: evaluation.overallExpectedWeight ?? (org ? this.config.cefrLevels[org.expectedCefr]?.weight ?? 0.67 : 0.67),
+      expectedCefr: org?.expectedCefr ?? 'B2',
+      overallGap: evaluation.overallGap ?? 0,
+      overallStatus: evaluation.overallStatus ?? 'MEETS',
+      developmentPriorities: evaluation.developmentPriority ?? [],
+      isComplete: evaluation.complete ?? false,
+      isPromotionGated: evaluation.isGated ?? false,
+      competencyBreakdown: evaluation.perCompetency ?? [],
     };
   }
 
@@ -242,6 +267,7 @@ export class CommunicationService {
     }));
 
     const evaluation = assess(this.config, assessment.org_level_key, ratingInputs);
+    const evaluationResult = this.formatEvaluation(assessment.org_level_key, evaluation);
 
     return {
       id: assessment.id,
@@ -267,7 +293,7 @@ export class CommunicationService {
         cefr: r.cefr,
         evidence: r.evidence,
       })),
-      evaluation,
+      evaluation: evaluationResult,
     };
   }
 
@@ -307,6 +333,7 @@ export class CommunicationService {
     }));
 
     const evaluation = assess(this.config, assessment.org_level_key, ratingInputs);
+    const evaluationResult = this.formatEvaluation(assessment.org_level_key, evaluation);
 
     return {
       id: assessment.id,
@@ -332,7 +359,7 @@ export class CommunicationService {
         cefr: r.cefr,
         evidence: r.evidence,
       })),
-      evaluation,
+      evaluation: evaluationResult,
     };
   }
 
@@ -360,7 +387,8 @@ export class CommunicationService {
         cefr: r.cefr as CefrLevelCode,
         evidence: r.evidence,
       }));
-      const evaluation = assess(this.config, a.org_level_key, ratingInputs);
+      const rawEvaluation = assess(this.config, a.org_level_key, ratingInputs);
+      const evaluation = this.formatEvaluation(a.org_level_key, rawEvaluation);
 
       return {
         id: a.id,
@@ -381,11 +409,17 @@ export class CommunicationService {
         assessed_at: a.assessed_at,
         created_at: a.created_at,
         updated_at: a.updated_at,
+        ratings: a.ratings.map((r) => ({
+          competency_key: r.competency_key,
+          cefr: r.cefr,
+          evidence: r.evidence,
+        })),
         ratingCount: a.ratings.length,
         overallCefr: evaluation.overallCefr,
         overallGap: evaluation.overallGap,
         overallStatus: evaluation.overallStatus,
         communicationReady: evaluation.communicationReady,
+        evaluation,
       };
     });
   }
@@ -445,6 +479,7 @@ export class CommunicationService {
     }));
 
     const evaluation = assess(this.config, updated.org_level_key, ratingInputs);
+    const evaluationResult = this.formatEvaluation(updated.org_level_key, evaluation);
 
     return {
       id: updated.id,
@@ -470,7 +505,7 @@ export class CommunicationService {
         cefr: r.cefr,
         evidence: r.evidence,
       })),
-      evaluation,
+      evaluation: evaluationResult,
     };
   }
 }
