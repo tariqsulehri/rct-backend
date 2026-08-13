@@ -21,10 +21,19 @@ definitions:
           - npm run type-check
           - npm run test -- --coverage --coverageReporters=lcov --coverageReporters=text
           - npm run build
+          - export S_URL="${SONAR_HOST_URL:-${sonar_host_url:-$SONAR_URL}}"
+          - export S_TOKEN="${SONAR_TOKEN:-${sonar_token:-$SONAR_SECRET}}"
+          - |
+            if [ -n "$S_URL" ] && [ -n "$S_TOKEN" ]; then
+              echo "Executing SonarQube analysis for $S_URL..."
+            else
+              echo "WARNING: SONAR_HOST_URL or SONAR_TOKEN is not configured in Bitbucket variables."
+              echo "Please set SONAR_HOST_URL and SONAR_TOKEN under Repository Settings -> Repository variables."
+            fi
           - pipe: sonarsource/sonarqube-scan:3.0.2
             variables:
-              SONAR_HOST_URL: ${SONAR_HOST_URL}
-              SONAR_TOKEN: ${SONAR_TOKEN}
+              SONAR_HOST_URL: ${SONAR_HOST_URL:-${sonar_host_url:-$SONAR_URL}}
+              SONAR_TOKEN: ${SONAR_TOKEN:-${sonar_token:-$SONAR_SECRET}}
     - step: &build-staging-image
         name: Build & Push Staging Docker Image
         image: docker:24.0.9
