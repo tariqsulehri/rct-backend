@@ -1,21 +1,30 @@
 image: node:24
 
+clone:
+  depth: full
+
 definitions:
   caches:
     node: ~/.npm
+    sonar: ~/.sonar
   steps:
     - step: &quality-checks
-        name: Backend Quality Checks
+        name: Backend Quality Checks & SonarQube Analysis
         caches:
           - node
+          - sonar
         script:
           - rm -rf node_modules
           - npm ci
           - npx prisma generate
           - npm run lint
           - npm run type-check
-          - npm run test
+          - npm run test -- --coverage --coverageReporters=lcov --coverageReporters=text
           - npm run build
+          - pipe: sonarsource/sonarqube-scan:3.0.2
+            variables:
+              SONAR_HOST_URL: ${SONAR_HOST_URL}
+              SONAR_TOKEN: ${SONAR_TOKEN}
     - step: &build-staging-image
         name: Build & Push Staging Docker Image
         image: docker:24.0.9
