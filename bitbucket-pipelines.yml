@@ -22,7 +22,9 @@ definitions:
         services:
           - docker
         script:
-          - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          - export DH_USER="${DOCKERHUB_USERNAME:-${DOCKER_USERNAME:-${docker_username:-$DOCKER_USER}}}"
+          - export DH_TOKEN="${DOCKERHUB_TOKEN:-${DOCKER_TOKEN:-${docker_tocken:-${docker_token:-$DOCKER_TOCKEN}}}}"
+          - echo "$DH_TOKEN" | docker login --username "$DH_USER" --password-stdin
           - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
           - docker build --platform linux/amd64 -t tariqsulehri/rct-backend:staging -t tariqsulehri/rct-backend:staging-$SHORT_SHA .
           - docker push tariqsulehri/rct-backend:staging
@@ -33,7 +35,9 @@ definitions:
         services:
           - docker
         script:
-          - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          - export DH_USER="${DOCKERHUB_USERNAME:-${DOCKER_USERNAME:-${docker_username:-$DOCKER_USER}}}"
+          - export DH_TOKEN="${DOCKERHUB_TOKEN:-${DOCKER_TOKEN:-${docker_tocken:-${docker_token:-$DOCKER_TOCKEN}}}}"
+          - echo "$DH_TOKEN" | docker login --username "$DH_USER" --password-stdin
           - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
           - export TIMESTAMP=$(date +'%m%d%y-%H%M%S')
           - export PKG_VERSION=$(node -p "require('./package.json').version")
@@ -53,7 +57,9 @@ pipelines:
           services:
             - docker
           script:
-            - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+            - export DH_USER="${DOCKERHUB_USERNAME:-${DOCKER_USERNAME:-${docker_username:-$DOCKER_USER}}}"
+            - export DH_TOKEN="${DOCKERHUB_TOKEN:-${DOCKER_TOKEN:-${docker_tocken:-${docker_token:-$DOCKER_TOCKEN}}}}"
+            - echo "$DH_TOKEN" | docker login --username "$DH_USER" --password-stdin
             - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
             - docker build --platform linux/amd64 -t tariqsulehri/rct-backend:dev -t tariqsulehri/rct-backend:dev-$SHORT_SHA .
             - docker push tariqsulehri/rct-backend:dev
@@ -80,7 +86,9 @@ pipelines:
           services:
             - docker
           script:
-            - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+            - export DH_USER="${DOCKERHUB_USERNAME:-${DOCKER_USERNAME:-${docker_username:-$DOCKER_USER}}}"
+            - export DH_TOKEN="${DOCKERHUB_TOKEN:-${DOCKER_TOKEN:-${docker_tocken:-${docker_token:-$DOCKER_TOCKEN}}}}"
+            - echo "$DH_TOKEN" | docker login --username "$DH_USER" --password-stdin
             - export TAG_VERSION=${BITBUCKET_TAG}
             - export MAJOR_VERSION=$(echo $TAG_VERSION | cut -d. -f1)
             - export MINOR_VERSION=$(echo $TAG_VERSION | cut -d. -f1,2)
