@@ -15,6 +15,34 @@ definitions:
           - npm run type-check
           - npm run test
           - npm run build
+    - step: &build-staging-image
+        name: Build & Push Staging Docker Image
+        image: docker:24.0.9
+        services:
+          - docker
+        script:
+          - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
+          - docker build --platform linux/amd64 -t tariqsulehri/rct-backend:staging -t tariqsulehri/rct-backend:staging-$SHORT_SHA -t tariqsulehri/rct-backend:stagging -t tariqsulehri/rct-backend:stagging-$SHORT_SHA .
+          - docker push tariqsulehri/rct-backend:staging
+          - docker push tariqsulehri/rct-backend:staging-$SHORT_SHA
+          - docker push tariqsulehri/rct-backend:stagging
+          - docker push tariqsulehri/rct-backend:stagging-$SHORT_SHA
+    - step: &build-master-image
+        name: Build & Push Production Master Image
+        image: docker:24.0.9
+        services:
+          - docker
+        script:
+          - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
+          - export TIMESTAMP=$(date +'%m%d%y-%H%M%S')
+          - export PKG_VERSION=$(node -p "require('./package.json').version")
+          - docker build --platform linux/amd64 -t tariqsulehri/rct-backend:production -t tariqsulehri/rct-backend:production-$SHORT_SHA -t tariqsulehri/rct-backend:v$PKG_VERSION-$TIMESTAMP -t tariqsulehri/rct-backend:latest-$TIMESTAMP .
+          - docker push tariqsulehri/rct-backend:production
+          - docker push tariqsulehri/rct-backend:production-$SHORT_SHA
+          - docker push tariqsulehri/rct-backend:v$PKG_VERSION-$TIMESTAMP
+          - docker push tariqsulehri/rct-backend:latest-$TIMESTAMP
 
 pipelines:
   branches:
@@ -32,43 +60,21 @@ pipelines:
             - docker push tariqsulehri/rct-backend:dev
             - docker push tariqsulehri/rct-backend:dev-$SHORT_SHA
 
-    staging: &staging-pipeline
+    staging:
       - step: *quality-checks
-      - step:
-          name: Build & Push Staging Docker Image
-          image: docker:24.0.9
-          services:
-            - docker
-          script:
-            - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
-            - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
-            - docker build --platform linux/amd64 -t tariqsulehri/rct-backend:staging -t tariqsulehri/rct-backend:staging-$SHORT_SHA .
-            - docker push tariqsulehri/rct-backend:staging
-            - docker push tariqsulehri/rct-backend:staging-$SHORT_SHA
+      - step: *build-staging-image
 
-    # Alias for legacy/typo branch name "stagging"
-    stagging: *staging-pipeline
-
-    master: &master-pipeline
+    stagging:
       - step: *quality-checks
-      - step:
-          name: Build & Push Production Master Image
-          image: docker:24.0.9
-          services:
-            - docker
-          script:
-            - echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
-            - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
-            - export TIMESTAMP=$(date +'%m%d%y-%H%M%S')
-            - export PKG_VERSION=$(node -p "require('./package.json').version")
-            # Production builds tagged with rolling production, commit SHA, version+timestamp, and timestamp
-            - docker build --platform linux/amd64 -t tariqsulehri/rct-backend:production -t tariqsulehri/rct-backend:production-$SHORT_SHA -t tariqsulehri/rct-backend:v$PKG_VERSION-$TIMESTAMP -t tariqsulehri/rct-backend:latest-$TIMESTAMP .
-            - docker push tariqsulehri/rct-backend:production
-            - docker push tariqsulehri/rct-backend:production-$SHORT_SHA
-            - docker push tariqsulehri/rct-backend:v$PKG_VERSION-$TIMESTAMP
-            - docker push tariqsulehri/rct-backend:latest-$TIMESTAMP
+      - step: *build-staging-image
 
-    main: *master-pipeline
+    master:
+      - step: *quality-checks
+      - step: *build-master-image
+
+    main:
+      - step: *quality-checks
+      - step: *build-master-image
 
   tags:
     'v*.*.*':
@@ -84,7 +90,6 @@ pipelines:
             - export MAJOR_VERSION=$(echo $TAG_VERSION | cut -d. -f1)
             - export MINOR_VERSION=$(echo $TAG_VERSION | cut -d. -f1,2)
             - export SHORT_SHA=$(echo $BITBUCKET_COMMIT | cut -c1-7)
-            # SemVer tag builds: v1.0.0, v1.0, v1, latest, and commit SHA tag
             - docker build --platform linux/amd64 -t tariqsulehri/rct-backend:$TAG_VERSION -t tariqsulehri/rct-backend:$MINOR_VERSION -t tariqsulehri/rct-backend:$MAJOR_VERSION -t tariqsulehri/rct-backend:latest -t tariqsulehri/rct-backend:production-$SHORT_SHA .
             - docker push tariqsulehri/rct-backend:$TAG_VERSION
             - docker push tariqsulehri/rct-backend:$MINOR_VERSION
