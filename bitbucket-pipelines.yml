@@ -30,7 +30,7 @@ definitions:
               echo "WARNING: SONAR_HOST_URL or SONAR_TOKEN is not configured in Bitbucket variables."
               echo "Please set SONAR_HOST_URL and SONAR_TOKEN under Repository Settings -> Repository variables."
             fi
-          - pipe: sonarsource/sonarqube-scan:4.0.1
+          - pipe: sonarsource/sonarqube-scan:3.0.2
             variables:
               SONAR_HOST_URL: ${SONAR_HOST_URL:-${sonar_host_url:-$SONAR_URL}}
               SONAR_TOKEN: ${SONAR_TOKEN:-${sonar_token:-$SONAR_SECRET}}
