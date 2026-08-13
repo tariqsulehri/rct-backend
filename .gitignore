@@ -6,10 +6,15 @@ dist/
 build/
 *.tsbuildinfo
 
-# Environment
+# Environment & Secrets
 .env
+.env.*
 .env.local
 .env.*.local
+*.pem
+*.key
+*.pfx
+*.p12
 
 # Logs
 *.log
