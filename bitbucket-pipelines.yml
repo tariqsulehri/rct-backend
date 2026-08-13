@@ -34,6 +34,7 @@ definitions:
             variables:
               SONAR_HOST_URL: ${SONAR_HOST_URL:-${sonar_host_url:-$SONAR_URL}}
               SONAR_TOKEN: ${SONAR_TOKEN:-${sonar_token:-$SONAR_SECRET}}
+              EXTRA_ARGS: '-Dsonar.nodejs.executable=node'
     - step: &build-staging-image
         name: Build & Push Staging Docker Image
         image: docker:24.0.9
