@@ -26,18 +26,12 @@ definitions:
           - coverage/**
     - step: &sonar-analysis
         name: SonarQube analysis
-        size: 2x
+        image: sonarsource/sonar-scanner-cli:latest
         max-time: 5
         caches:
           - sonar
         script:
-          - unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY
-          - pipe: sonarsource/sonarqube-scan:4.0.0
-            variables:
-              SONAR_HOST_URL: ${SONAR_HOST_URL}
-              SONAR_TOKEN: ${SONAR_TOKEN}
-              SONAR_SCANNER_OPTS: "-Xmx2048m"
-              EXTRA_ARGS: "-Dsonar.javascript.node.maxspace=2048 -Dsonar.verbose=true"
+          - sonar-scanner -Dsonar.host.url="${SONAR_HOST_URL}" -Dsonar.token="${SONAR_TOKEN}"
     - step: &build-staging-image
         name: Build & Push Staging Docker Image
         max-time: 15
