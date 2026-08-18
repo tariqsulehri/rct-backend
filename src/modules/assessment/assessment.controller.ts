@@ -58,6 +58,7 @@ export const assessmentController = {
       if (req.user!.role === 'ENGINEER') {
         // Strip level — engineers may not update their own proficiency level
         delete body.level;
+        body.status = 'draft';
       }
 
       const result = await assessmentService.updateSkillAssessment(id, body, req.user!.employeeId);
