@@ -9,15 +9,13 @@ export const ratingInputSchema = z.object({
 });
 
 export const createBehavioralAssessmentSchema = z.object({
-  body: z.object({
-    subjectId: z.string().min(1, 'Subject ID (Employee Code or ID) is required'),
-    gradeKey: z.string().min(1, 'Grade key is required'),
-    ratings: z
-      .array(ratingInputSchema)
-      .min(1, 'At least one competency rating must be provided'),
-  }),
+  subjectId: z.string().min(1, 'Subject ID (Employee Code or ID) is required'),
+  gradeKey: z.string().min(1, 'Grade key is required'),
+  ratings: z
+    .array(ratingInputSchema)
+    .min(1, 'At least one competency rating must be provided'),
 });
 
 export type CreateBehavioralAssessmentInput = z.infer<
   typeof createBehavioralAssessmentSchema
->['body'];
+>;
