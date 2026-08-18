@@ -119,6 +119,15 @@ function priorityFromGap(gapPct: number): Priority {
   return 'neutral';
 }
 
+/**
+ * Normalizes any score value (whether represented as a 0..1 ratio or 0..100 percentage)
+ * to a standard 0..100 percentage scale.
+ */
+function normalizeToPercent(value: number | null | undefined): number {
+  if (value == null || !Number.isFinite(value) || value <= 0) return 0;
+  return value <= 1 ? value * 100 : value;
+}
+
 function buildDeterministicDashboard(
   focus: FocusMode,
   promoRows: Awaited<ReturnType<typeof promotionReadiness>>,
@@ -128,17 +137,17 @@ function buildDeterministicDashboard(
   const assessedRows = promoRows.filter((r) => r.overall_score > 0);
   const readyCount = promoRows.filter((r) => r.promotion_ready).length;
   const avgAchieved = assessedRows.length
-    ? assessedRows.reduce((sum, r) => sum + r.overall_score, 0) / assessedRows.length
+    ? assessedRows.reduce((sum, r) => sum + normalizeToPercent(r.overall_score), 0) / assessedRows.length
     : 0;
   const thresholdRows = promoRows.filter((r) => r.avg_threshold > 0);
   const avgRequired = thresholdRows.length
-    ? thresholdRows.reduce((sum, r) => sum + r.avg_threshold, 0) / thresholdRows.length
+    ? thresholdRows.reduce((sum, r) => sum + normalizeToPercent(r.avg_threshold), 0) / thresholdRows.length
     : 0;
   const readinessRate = promoRows.length ? readyCount / promoRows.length : 0;
 
   const domainNames = compRows.length > 0 ? Object.keys(compRows[0].domain_scores) : [];
   const domainAverages = domainNames.map((domain) => {
-    const values = compRows.map((r) => r.domain_scores[domain] ?? 0).filter((score) => score > 0);
+    const values = compRows.map((r) => normalizeToPercent(r.domain_scores[domain])).filter((score) => score > 0);
     const avg = values.length ? values.reduce((sum, score) => sum + score, 0) / values.length : 0;
     return { domain, avg, assessed: values.length };
   }).filter((d) => d.assessed > 0);
@@ -147,11 +156,15 @@ function buildDeterministicDashboard(
   const strongestDomains = [...domainAverages].sort((a, b) => b.avg - a.avg).slice(0, 4);
   const riskRows = [...promoRows]
     .filter((r) => !r.promotion_ready && r.total_competencies > 0)
-    .map((r) => ({
-      ...r,
-      gap: Math.max(0, (r.avg_threshold || 0) - r.overall_score),
-      meetsRate: r.meets_count / Math.max(1, r.total_competencies),
-    }))
+    .map((r) => {
+      const achieved = normalizeToPercent(r.overall_score);
+      const required = normalizeToPercent(r.avg_threshold);
+      return {
+        ...r,
+        gap: Math.max(0, required - achieved),
+        meetsRate: r.meets_count / Math.max(1, r.total_competencies),
+      };
+    })
     .sort((a, b) => b.gap - a.gap);
   const nearReady = riskRows.filter((r) => r.meetsRate >= 0.7).slice(0, 5);
 
@@ -172,15 +185,15 @@ function buildDeterministicDashboard(
     empCode: r.emp_code,
     currentGrade: r.current_grade,
     targetGrade: r.target_grade,
-    gapPct: Math.round(r.gap * 100),
+    gapPct: Math.round(r.gap),
     meets: `${r.meets_count}/${r.total_competencies}`,
-    action: r.gap >= 0.25
+    action: r.gap >= 25
       ? 'Create a 30-day recovery plan with weekly skill checkpoints.'
       : 'Use focused mentoring to close the remaining target-grade gaps.',
   }));
 
   const skillAreas: SkillAreaInsight[] = weakestDomains.map((d) => {
-    const averagePct = Math.round(d.avg * 100);
+    const averagePct = Math.round(d.avg);
     return {
       domain: d.domain,
       averagePct,
@@ -192,7 +205,7 @@ function buildDeterministicDashboard(
 
   const strengths: Strength[] = strongestDomains.map((d) => ({
     domain: d.domain,
-    averagePct: Math.round(d.avg * 100),
+    averagePct: Math.round(d.avg),
     recommendation: `Use strong performers in ${d.domain} as mentors for adjacent skill areas.`,
   }));
 
@@ -201,7 +214,7 @@ function buildDeterministicDashboard(
   const highestRisk = topRiskPeople[0];
   const summary = promoRows.length === 0
     ? 'No readiness dataset is available yet.'
-    : `${readyCount} of ${promoRows.length} resources are ready for next grade. Average achieved score is ${Math.round(avgAchieved * 100)}% against ${avgRequired > 0 ? `${Math.round(avgRequired * 100)}% required` : 'no configured benchmark'}.`;
+    : `${readyCount} of ${promoRows.length} resources are ready for next grade. Average achieved score is ${Math.round(avgAchieved)}% against ${avgRequired > 0 ? `${Math.round(avgRequired)}% required` : 'no configured benchmark'}.`;
 
   const focusAnswers: Record<FocusMode, string> = {
     executive: `${summary} The immediate management story is readiness risk, skill-area consistency, and focused intervention.`,
@@ -229,8 +242,8 @@ function buildDeterministicDashboard(
       totalResources: promoRows.length,
       readyResources: readyCount,
       readinessRatePct: Math.round(readinessRate * 100),
-      avgAchievedPct: Math.round(avgAchieved * 100),
-      avgRequiredPct: Math.round(avgRequired * 100),
+      avgAchievedPct: Math.round(avgAchieved),
+      avgRequiredPct: Math.round(avgRequired),
       nearReadyCount: nearReady.length,
       criticalBlockerCount,
     },
@@ -292,8 +305,8 @@ function buildAiPayload(
       empCode: r.emp_code,
       currentGrade: r.current_grade,
       targetGrade: r.target_grade,
-      achievedPct: Math.round(r.overall_score > 1 ? r.overall_score : r.overall_score * 100),
-      requiredPct: Math.round(r.avg_threshold > 1 ? r.avg_threshold : r.avg_threshold * 100),
+      achievedPct: Math.round(normalizeToPercent(r.overall_score)),
+      requiredPct: Math.round(normalizeToPercent(r.avg_threshold)),
       meets: `${r.meets_count}/${r.total_competencies}`,
       ready: r.promotion_ready,
     })),
