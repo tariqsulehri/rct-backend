@@ -105,6 +105,42 @@ export function buildDomainScores(
   return domainScores;
 }
 
+export function buildReadinessDomainScores(
+  competencyScores: Map<number, number>,
+  competencies: DomainScoredCompetency[],
+  thresholds: Map<number, number>,
+  domainNames: string[],
+  departmentId?: number | null,
+): Record<string, number> {
+  const domainTotals = new Map<string, { sum: number; count: number }>();
+  for (const domainName of domainNames) {
+    domainTotals.set(domainName, { sum: 0, count: 0 });
+  }
+
+  for (const competency of competencies) {
+    const threshold = thresholds.get(competency.id) ?? 0;
+    if (threshold <= 0) continue; // Must be required for the grade
+
+    const score = competencyScores.get(competency.id) ?? 0;
+    const domainName = getPrimaryDomain(competency.competency_domains, departmentId).name;
+    const total = domainTotals.get(domainName);
+    if (!total) continue;
+
+    total.sum += score;
+    total.count++;
+  }
+
+  const domainScores: Record<string, number> = {};
+  for (const domainName of domainNames) {
+    const total = domainTotals.get(domainName)!;
+    if (total.count > 0) {
+      domainScores[domainName] = total.sum / total.count;
+    }
+  }
+
+  return domainScores;
+}
+
 export function weightedOverall(
   domainScores: Record<string, number>,
   weights?: Map<string, number>,

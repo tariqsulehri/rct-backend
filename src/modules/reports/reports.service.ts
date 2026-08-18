@@ -5,6 +5,7 @@ import {
   buildCompetencyThresholdMap,
   buildDomainGapSummary,
   buildDomainScores,
+  buildReadinessDomainScores,
   buildThresholdStats,
   calculateCompetencyGap,
   getPrimaryDomain,
@@ -147,7 +148,7 @@ export async function gapAnalysis(employeeId: number) {
   // overall_score: weighted by domain grade weights for the employee's target grade
   const domainWeightMap = await loadDomainWeights([employee.target_grade_id]);
   const gradeWeights = domainWeightMap.get(employee.target_grade_id);
-  const domainScores = buildDomainScores(compScoreMap, allCompetencies, domainNames, employee.department_id);
+  const domainScores = buildReadinessDomainScores(compScoreMap, allCompetencies, thresholdMap, domainNames, employee.department_id);
   const overall_score = weightedOverall(domainScores, gradeWeights);
 
   return {
@@ -192,12 +193,12 @@ export async function promotionReadiness(userId: number, managerId: number, role
   for (const emp of employees) {
     const compScoreMap = storedScores.get(emp.id) ?? new Map<number, number>();
 
-    // Domain scores = avg of scored competencies, weighted by grade
-    const domainScores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
-    const overall_score = Number((weightedOverall(domainScores, domainWeightMap.get(emp.target_grade_id)) * 100).toFixed(1));
-
     const thresholds = getGradeThresholdMap(gradeThresholds, emp.department_id, emp.target_grade_id);
     const thresholdMap = buildCompetencyThresholdMap(allCompetencies, thresholds);
+
+    // Domain scores = avg of scored competencies, weighted by grade
+    const domainScores = buildReadinessDomainScores(compScoreMap, allCompetencies, thresholdMap, domainNames, emp.department_id);
+    const overall_score = Number((weightedOverall(domainScores, domainWeightMap.get(emp.target_grade_id)) * 100).toFixed(1));
     const {
       averageThreshold: avg_threshold,
       thresholdCount: threshold_count,
@@ -421,9 +422,10 @@ export async function gapMatrix(userId: number, managerId: number, role: RoleCod
     const domain_gaps = buildDomainGapSummary(Object.values(competency_gaps), domainNames);
 
     const gradeWeights = domainWeightMap.get(emp.target_grade_id);
-    // overall_score: use buildDomainScores (consistent with all other report functions)
-    const domainScoresForOverall = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
-    const overall_score = weightedOverall(domainScoresForOverall, gradeWeights);
+    const scoreRecord: Record<string, number> = Object.fromEntries(
+      Object.entries(domain_gaps).filter(([, d]) => d.threshold > 0).map(([k, d]) => [k, d.score])
+    );
+    const overall_score = weightedOverall(scoreRecord, gradeWeights);
     // overall_threshold: weighted avg of domain thresholds (only domains with threshold > 0)
     const thresholdRecord: Record<string, number> = Object.fromEntries(
       Object.entries(domain_gaps).filter(([, d]) => d.threshold > 0).map(([k, d]) => [k, d.threshold])
