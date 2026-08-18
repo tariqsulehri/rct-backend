@@ -224,7 +224,7 @@ export function buildDomainGapSummary(
   for (const row of rows) {
     const acc = domainAcc.get(row.domain);
     if (!acc) continue;
-    if (row.threshold > 0 || row.score > 0) {
+    if (row.threshold > 0) {
       acc.scoreSum += row.score;
       acc.threshSum += row.threshold;
       acc.count++;

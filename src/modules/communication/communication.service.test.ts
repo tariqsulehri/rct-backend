@@ -27,9 +27,6 @@ describe('Communication Service & Schema', () => {
       expect(config).toBeDefined();
       expect(Object.keys(config.cefrLevels)).toHaveLength(6);
       expect(config.competencies).toHaveLength(6);
-      expect(Object.keys(config.orgLevels)).toHaveLength(9);
-      expect(config.targetOverrides.associate.presentation).toBe('A2');
-      expect(config.targetOverrides.associate.stakeholder_exec).toBe('A2');
     });
   });
 
@@ -100,7 +97,7 @@ describe('Communication Service & Schema', () => {
         developmentPriority: [],
       };
 
-      const formatted = service.formatEvaluation('senior', rawEval);
+      const formatted = service.formatEvaluation({ default: 'B2' }, 3, rawEval);
       expect(formatted.overallScore).toBe(0.67);
       expect(formatted.expectedScore).toBe(0.67);
       expect(formatted.expectedCefr).toBe('B2');

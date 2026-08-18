@@ -143,6 +143,9 @@ export class CommunicationService {
 
     const orgLevelKey =
       data.org_level_key ?? gradeLevelToOrgLevelKey(employee.current_grade.level);
+    
+    const gradeCode = employee.current_grade.code;
+    const orgOrdinal = employee.current_grade.level;
 
     let status = data.status ?? 'approved';
     if (isEngineer && status === 'approved') {
@@ -155,8 +158,16 @@ export class CommunicationService {
       evidence: r.evidence ?? null,
     }));
 
+    const expectedRecords = await db.cefrExpected.findMany({
+      where: { grade_key: gradeCode },
+    });
+    const expectedCefrs: Record<string, CefrLevelCode> = {};
+    for (const rec of expectedRecords) {
+      expectedCefrs[rec.competency_key] = rec.level as CefrLevelCode;
+    }
+
     // Pre-evaluate to validate ratings against engine rules
-    const evaluation = assess(this.config, orgLevelKey, ratingInputs);
+    const evaluation = assess(this.config, expectedCefrs, orgOrdinal, ratingInputs);
 
     const activePeriod = await assertActiveSubmissionWindow({ isManagerReview: !isEngineer });
 
@@ -190,7 +201,7 @@ export class CommunicationService {
       return assessment;
     });
 
-    const evaluationResult = this.formatEvaluation(orgLevelKey, evaluation);
+    const evaluationResult = this.formatEvaluation(expectedCefrs, orgOrdinal, evaluation);
 
     return {
       id: saved.id,
@@ -223,17 +234,20 @@ export class CommunicationService {
   /**
    * Enriches raw CEFR evaluation result with calculated scores and formatted properties.
    *
-   * @param orgLevelKey - Employee organizational level key.
+   * @param expectedCefrs - Map of expected thresholds
+   * @param orgOrdinal - Org ordinal for formatting
    * @param evaluation - Raw engine evaluation output.
    * @returns Formatted evaluation with backward-compatible overallScore, expectedCefr, etc.
    */
-  private formatEvaluation(orgLevelKey: string, evaluation: CefrAssessmentResult) {
-    const org = this.config.orgLevels[orgLevelKey];
+  private formatEvaluation(expectedCefrs: Record<string, CefrLevelCode>, orgOrdinal: number, evaluation: CefrAssessmentResult) {
+    const defaultExp = expectedCefrs['default'] ?? 'B2';
+    const expWeight = this.config.cefrLevels[defaultExp]?.weight ?? 0.67;
+    
     return {
       ...evaluation,
       overallScore: evaluation.overallWeight ?? 0,
-      expectedScore: evaluation.overallExpectedWeight ?? (org ? this.config.cefrLevels[org.expectedCefr]?.weight ?? 0.67 : 0.67),
-      expectedCefr: org?.expectedCefr ?? 'B2',
+      expectedScore: evaluation.overallExpectedWeight ?? expWeight,
+      expectedCefr: defaultExp,
       overallGap: evaluation.overallGap ?? 0,
       overallStatus: evaluation.overallStatus ?? 'MEETS',
       developmentPriorities: evaluation.developmentPriority ?? [],
@@ -247,7 +261,7 @@ export class CommunicationService {
     const assessment = await db.commAssessment.findUnique({
       where: { id },
       include: {
-        employee: true,
+        employee: { include: { current_grade: true } },
         assessor: {
           include: { employee: true },
         },
@@ -266,8 +280,19 @@ export class CommunicationService {
       evidence: r.evidence,
     }));
 
-    const evaluation = assess(this.config, assessment.org_level_key, ratingInputs);
-    const evaluationResult = this.formatEvaluation(assessment.org_level_key, evaluation);
+    const gradeCode = assessment.employee.current_grade.code;
+    const orgOrdinal = assessment.employee.current_grade.level;
+
+    const expectedRecords = await db.cefrExpected.findMany({
+      where: { grade_key: gradeCode },
+    });
+    const expectedCefrs: Record<string, CefrLevelCode> = {};
+    for (const rec of expectedRecords) {
+      expectedCefrs[rec.competency_key] = rec.level as CefrLevelCode;
+    }
+
+    const evaluation = assess(this.config, expectedCefrs, orgOrdinal, ratingInputs);
+    const evaluationResult = this.formatEvaluation(expectedCefrs, orgOrdinal, evaluation);
 
     return {
       id: assessment.id,
@@ -313,7 +338,7 @@ export class CommunicationService {
       },
       orderBy: { assessed_at: 'desc' },
       include: {
-        employee: true,
+        employee: { include: { current_grade: true } },
         assessor: {
           include: { employee: true },
         },
@@ -332,8 +357,19 @@ export class CommunicationService {
       evidence: r.evidence,
     }));
 
-    const evaluation = assess(this.config, assessment.org_level_key, ratingInputs);
-    const evaluationResult = this.formatEvaluation(assessment.org_level_key, evaluation);
+    const gradeCode = assessment.employee.current_grade.code;
+    const orgOrdinal = assessment.employee.current_grade.level;
+
+    const expectedRecords = await db.cefrExpected.findMany({
+      where: { grade_key: gradeCode },
+    });
+    const expectedCefrs: Record<string, CefrLevelCode> = {};
+    for (const rec of expectedRecords) {
+      expectedCefrs[rec.competency_key] = rec.level as CefrLevelCode;
+    }
+
+    const evaluation = assess(this.config, expectedCefrs, orgOrdinal, ratingInputs);
+    const evaluationResult = this.formatEvaluation(expectedCefrs, orgOrdinal, evaluation);
 
     return {
       id: assessment.id,
@@ -381,14 +417,25 @@ export class CommunicationService {
       },
     });
 
+    const gradeCode = employee.current_grade.code;
+    const orgOrdinal = employee.current_grade.level;
+
+    const expectedRecords = await db.cefrExpected.findMany({
+      where: { grade_key: gradeCode },
+    });
+    const expectedCefrs: Record<string, CefrLevelCode> = {};
+    for (const rec of expectedRecords) {
+      expectedCefrs[rec.competency_key] = rec.level as CefrLevelCode;
+    }
+
     return assessments.map((a) => {
       const ratingInputs: RatingInput[] = a.ratings.map((r) => ({
         competencyKey: r.competency_key,
         cefr: r.cefr as CefrLevelCode,
         evidence: r.evidence,
       }));
-      const rawEvaluation = assess(this.config, a.org_level_key, ratingInputs);
-      const evaluation = this.formatEvaluation(a.org_level_key, rawEvaluation);
+      const rawEvaluation = assess(this.config, expectedCefrs, orgOrdinal, ratingInputs);
+      const evaluation = this.formatEvaluation(expectedCefrs, orgOrdinal, rawEvaluation);
 
       return {
         id: a.id,
@@ -462,7 +509,7 @@ export class CommunicationService {
           assessed_at: new Date(),
         },
         include: {
-          employee: true,
+          employee: { include: { current_grade: true } },
           assessor: {
             include: { employee: true },
           },
@@ -478,8 +525,19 @@ export class CommunicationService {
       evidence: r.evidence,
     }));
 
-    const evaluation = assess(this.config, updated.org_level_key, ratingInputs);
-    const evaluationResult = this.formatEvaluation(updated.org_level_key, evaluation);
+    const gradeCode = updated.employee.current_grade.code;
+    const orgOrdinal = updated.employee.current_grade.level;
+
+    const expectedRecords = await db.cefrExpected.findMany({
+      where: { grade_key: gradeCode },
+    });
+    const expectedCefrs: Record<string, CefrLevelCode> = {};
+    for (const rec of expectedRecords) {
+      expectedCefrs[rec.competency_key] = rec.level as CefrLevelCode;
+    }
+
+    const evaluation = assess(this.config, expectedCefrs, orgOrdinal, ratingInputs);
+    const evaluationResult = this.formatEvaluation(expectedCefrs, orgOrdinal, evaluation);
 
     return {
       id: updated.id,

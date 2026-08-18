@@ -110,38 +110,22 @@ export function statusOf(gap: number): AssessmentStatus {
  *
  * @throws {Error} If `orgKey` is not defined in configuration.
  */
-export function expectedFor(
-  cfg: CefrEngineConfig,
-  orgKey: string,
-  compKey: string,
-): CefrLevelCode {
-  const override = cfg.targetOverrides[orgKey]?.[compKey];
-  if (override) return override;
-
-  const orgLevel = cfg.orgLevels[orgKey];
-  if (!orgLevel) {
-    throw new Error(`Unknown org level: '${orgKey}'`);
-  }
-  return orgLevel.expectedCefr;
-}
+/**
+ * Obsolete: expectedFor is removed. Expected values are passed in from DB directly.
+ */
 
 /**
  * Validates rating inputs against engine configuration.
  *
  * @param cfg - CEFR engine configuration instance.
- * @param orgKey - Employee job level key.
  * @param ratings - List of competency rating inputs.
  *
- * @throws {Error} If `orgKey` is invalid, CEFR code is unknown, or duplicate competencies exist.
+ * @throws {Error} If CEFR code is unknown, or duplicate competencies exist.
  */
 export function validateRatings(
   cfg: CefrEngineConfig,
-  orgKey: string,
   ratings: RatingInput[],
 ): void {
-  if (!cfg.orgLevels[orgKey]) {
-    throw new Error(`Invalid org level key: '${orgKey}'`);
-  }
 
   const validCompKeys = new Set(cfg.competencies.map((c) => c.key));
   const seenComps = new Set<string>();
@@ -177,7 +161,8 @@ export function validateRatings(
  *   - R9-R10: Generate prioritized development areas sorted worst gap first.
  *
  * @param cfg - CEFR engine rules configuration.
- * @param orgKey - Employee organizational level key.
+ * @param expectedCefrs - Map of competency key to target CEFR level
+ * @param orgOrdinal - Numeric grade ordinal used to calculate gating rules
  * @param ratings - Array of competency rating inputs.
  *
  * @returns Complete CefrAssessmentResult structure.
@@ -186,19 +171,19 @@ export function validateRatings(
  */
 export function assess(
   cfg: CefrEngineConfig = DEFAULT_CEFR_CONFIG,
-  orgKey: string,
+  expectedCefrs: Record<string, CefrLevelCode>,
+  orgOrdinal: number,
   ratings: RatingInput[],
 ): CefrAssessmentResult {
-  validateRatings(cfg, orgKey, ratings);
+  validateRatings(cfg, ratings);
 
-  const org = cfg.orgLevels[orgKey];
   const requiredCompKeys = cfg.competencies.map((c) => c.key);
   const complete =
     ratings.length === requiredCompKeys.length &&
     requiredCompKeys.every((k) => ratings.some((r) => r.competencyKey === k));
 
   const perCompetency: CompetencyAssessmentResult[] = ratings.map((r) => {
-    const exp = expectedFor(cfg, orgKey, r.competencyKey);
+    const exp = expectedCefrs[r.competencyKey] ?? expectedCefrs['default'] ?? 'B2'; // fallback to default or B2
     const ratingWeight = cfg.cefrLevels[r.cefr].weight;
     const expWeight = cfg.cefrLevels[exp].weight;
     const gap = roundHalfUp(ratingWeight - expWeight, cfg.policy.roundDecimals);
@@ -222,14 +207,15 @@ export function assess(
 
   const overallCefr =
     overallWeight !== null ? bandOf(overallWeight, cfg.bandThresholds) : null;
-  const overallExpectedWeight = cfg.cefrLevels[org.expectedCefr].weight;
+  const defaultExp = expectedCefrs['default'] ?? expectedCefrs[requiredCompKeys[0]] ?? 'B2';
+  const overallExpectedWeight = cfg.cefrLevels[defaultExp].weight;
   const overallGap =
     overallWeight !== null
       ? roundHalfUp(overallWeight - overallExpectedWeight, cfg.policy.roundDecimals)
       : null;
   const overallStatus = overallGap !== null ? statusOf(overallGap) : null;
 
-  const isGated = org.ordinal >= cfg.policy.gateFromOrdinal;
+  const isGated = orgOrdinal >= cfg.policy.gateFromOrdinal;
 
   let communicationReady: boolean | null;
   if (!complete) {

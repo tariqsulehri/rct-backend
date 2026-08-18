@@ -493,14 +493,17 @@ export async function getExecutiveSummaryReport(userId: number, managerId: numbe
 
   const { allCompetencies, domainNames } = await loadReportSkillContext();
   const targetGradeIds = getReportTargetGradeIds(employees);
+  const departmentIds = getReportDepartmentIds(employees);
+  const matrixMap = await loadGradeThresholds(departmentIds, targetGradeIds);
   const domainWeightMap = await loadDomainWeights(targetGradeIds);
   const storedScores = await getStoredCompScores(employeeIds);
 
   let totalTechScoreSum = 0;
+  let totalTechThresholdSum = 0;
   let promotionReadyCount = 0;
   let cefrReadyCount = 0;
 
-  const deptMap = new Map<string, { count: number; techScoreSum: number; cefrReadyCount: number }>();
+  const deptMap = new Map<string, { count: number; techScoreSum: number; techThresholdSum: number; cefrReadyCount: number }>();
 
   // Query latest CEFR assessments for all employees
   const cefrAssessments = await db.commAssessment.findMany({
@@ -519,7 +522,16 @@ export async function getExecutiveSummaryReport(userId: number, managerId: numbe
     const domainScores = buildDomainScores(compScoreMap, allCompetencies, domainNames, emp.department_id);
     const finalTechScore = Number((weightedOverall(domainScores, domainWeightMap.get(emp.target_grade_id)) * 100).toFixed(1));
 
+    const thresholds = getGradeThresholdMap(matrixMap, emp.department_id, emp.target_grade_id);
+    const competency_gaps = allCompetencies.map((c) => buildCompetencyGapDetail(c, compScoreMap, thresholds, { departmentId: emp.department_id, fallbackDomain: c.domain }));
+    const domain_gaps = buildDomainGapSummary(competency_gaps, domainNames);
+    const thresholdRecord: Record<string, number> = Object.fromEntries(
+      Object.entries(domain_gaps).filter(([, d]) => d.threshold > 0).map(([k, d]) => [k, d.threshold])
+    );
+    const finalTechThreshold = Number((weightedOverall(thresholdRecord, domainWeightMap.get(emp.target_grade_id)) * 100).toFixed(1));
+
     totalTechScoreSum += finalTechScore;
+    totalTechThresholdSum += finalTechThreshold;
 
     const cefrAssessment = cefrMap.get(emp.id);
     if (cefrAssessment) {
@@ -534,20 +546,22 @@ export async function getExecutiveSummaryReport(userId: number, managerId: numbe
     const isCefrReady = cefrEval.isCefrReady;
     if (isCefrReady) cefrReadyCount++;
 
-    if (finalTechScore >= 80 && isCefrReady) {
+    if (finalTechScore >= finalTechThreshold && isCefrReady) {
       promotionReadyCount++;
     }
 
     const deptName = emp.department ?? 'General';
-    const deptStats = deptMap.get(deptName) ?? { count: 0, techScoreSum: 0, cefrReadyCount: 0 };
+    const deptStats = deptMap.get(deptName) ?? { count: 0, techScoreSum: 0, techThresholdSum: 0, cefrReadyCount: 0 };
     deptStats.count += 1;
     deptStats.techScoreSum += finalTechScore;
+    deptStats.techThresholdSum += finalTechThreshold;
     if (isCefrReady) deptStats.cefrReadyCount += 1;
     deptMap.set(deptName, deptStats);
   }
 
   const empCount = employees.length || 1;
   const overallOrgScore = Number((totalTechScoreSum / empCount).toFixed(1));
+  const expectedOrgScore = Number((totalTechThresholdSum / empCount).toFixed(1));
   const cefrReadyRate = Number(((cefrReadyCount / empCount) * 100).toFixed(1));
   const cefrCurrentReadyRate = cefrAssessedCount > 0
     ? Number(((cefrCurrentReadyCount / cefrAssessedCount) * 100).toFixed(1))
@@ -555,8 +569,8 @@ export async function getExecutiveSummaryReport(userId: number, managerId: numbe
 
   const departmentBreakdown = Array.from(deptMap.entries()).map(([department, stats]) => {
     const avgTechScore = Number((stats.techScoreSum / (stats.count || 1)).toFixed(1));
+    const expectedTechScore = Number((stats.techThresholdSum / (stats.count || 1)).toFixed(1));
     const cefrReadyRate = Number(((stats.cefrReadyCount / (stats.count || 1)) * 100).toFixed(1));
-    const expectedTechScore = 80.0;
     const expectedCefrReadyRate = 100.0;
     const techGap = Number((avgTechScore - expectedTechScore).toFixed(1));
     const cefrGap = Number((cefrReadyRate - expectedCefrReadyRate).toFixed(1));
@@ -577,7 +591,7 @@ export async function getExecutiveSummaryReport(userId: number, managerId: numbe
     kpis: {
       totalEmployees: employees.length,
       overallOrgScore,
-      expectedOrgScore: 80.0,
+      expectedOrgScore,
       cefrReadyRate,
       expectedCefrRate: 100.0,
       cefrAssessedCount,

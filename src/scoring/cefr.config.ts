@@ -59,8 +59,6 @@ export interface CefrEngineConfig {
   cefrLevels: Record<CefrLevelCode, CefrLevelDefinition>;
   bandThresholds: CefrBandThreshold[];
   competencies: CefrCompetencyDefinition[];
-  orgLevels: Record<string, CefrOrgLevelDefinition>;
-  targetOverrides: Record<string, Record<string, CefrLevelCode>>;
   policy: CefrPolicyConfig;
 }
 
@@ -100,25 +98,6 @@ export const CEFR_COMPETENCIES: CefrCompetencyDefinition[] = [
   { key: 'cross_cultural', name: 'Cross-Cultural & Global Collaboration', sortOrder: 6 },
 ];
 
-export const CEFR_ORG_LEVELS: Record<string, CefrOrgLevelDefinition> = {
-  associate: { key: 'associate', ordinal: 1, name: 'Associate', expectedCefr: 'B1' },
-  engineer: { key: 'engineer', ordinal: 2, name: 'Engineer / Professional', expectedCefr: 'B1' },
-  senior: { key: 'senior', ordinal: 3, name: 'Senior', expectedCefr: 'B2' },
-  lead: { key: 'lead', ordinal: 4, name: 'Lead / Principal', expectedCefr: 'B2' },
-  manager: { key: 'manager', ordinal: 5, name: 'Manager', expectedCefr: 'C1' },
-  senior_mgr: { key: 'senior_mgr', ordinal: 6, name: 'Senior Manager', expectedCefr: 'C1' },
-  director: { key: 'director', ordinal: 7, name: 'Director', expectedCefr: 'C1' },
-  vp: { key: 'vp', ordinal: 8, name: 'Vice President', expectedCefr: 'C2' },
-  c_level: { key: 'c_level', ordinal: 9, name: 'C-Level (CxO)', expectedCefr: 'C2' },
-};
-
-export const CEFR_TARGET_OVERRIDES: Record<string, Record<string, CefrLevelCode>> = {
-  associate: {
-    presentation: 'A2',
-    stakeholder_exec: 'A2',
-  },
-};
-
 export const DEFAULT_CEFR_POLICY: CefrPolicyConfig = {
   gateFromOrdinal: 3,
   gatePolicy: 'overall',
@@ -130,7 +109,5 @@ export const DEFAULT_CEFR_CONFIG: CefrEngineConfig = {
   cefrLevels: CEFR_LEVELS,
   bandThresholds: CEFR_BAND_THRESHOLDS,
   competencies: CEFR_COMPETENCIES,
-  orgLevels: CEFR_ORG_LEVELS,
-  targetOverrides: CEFR_TARGET_OVERRIDES,
   policy: DEFAULT_CEFR_POLICY,
 };

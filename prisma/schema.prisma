@@ -736,6 +736,7 @@ model BehavGrade {
 
   expected_matrix BehavExpected[]
   assessments     BehavAssessment[]
+  cefr_expected   CefrExpected[]
 
   @@map("behav_grade")
 }
@@ -789,4 +790,19 @@ model BehavRating {
   @@map("behav_rating")
 }
 
+// ============================================================================
+// CEFR EXPECTED (Communication Thresholds)
+// ============================================================================
 
+model CefrExpected {
+  grade_key      String
+  competency_key String
+  level          String // "A1", "A2", "B1", "B2", "C1", "C2"
+
+  grade      BehavGrade @relation(fields: [grade_key], references: [key], onDelete: Cascade)
+
+  @@id([grade_key, competency_key])
+  @@index([grade_key])
+  @@index([competency_key])
+  @@map("cefr_expected")
+}

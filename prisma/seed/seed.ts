@@ -1051,6 +1051,35 @@ async function main() {
   }
   console.log(`  ✅ ${BEHAV_LEVELS.length} Levels, ${BEHAV_COMPETENCIES.length} Competencies, ${BEHAV_GRADES.length} Grades, Expected Matrix populated.`);
 
+  const CEFR_COMP_KEYS = [
+    'written_clarity', 'spoken_fluency', 'presentation', 
+    'active_listening', 'stakeholder_exec', 'cross_cultural'
+  ];
+
+  // SSOT: Global Communication (CEFR) thresholds mapped strictly by Grade
+  const CEFR_EXPECTED_MATRIX: Record<string, Record<string, string>> = {
+    G13: { default: 'B1', presentation: 'A2', stakeholder_exec: 'A2' }, // Associate
+    G14: { default: 'B1' }, // Engineer
+    G15: { default: 'B2' }, // Senior
+    G16: { default: 'B2' }, // Principal
+    G17: { default: 'C1' }, // Associate Architect
+  };
+
+  for (const [gradeKey, compMap] of Object.entries(CEFR_EXPECTED_MATRIX)) {
+    const defaultLevel = compMap['default'];
+    for (const compKey of CEFR_COMP_KEYS) {
+      const levelCode = compMap[compKey] || defaultLevel;
+      await prisma.cefrExpected.upsert({
+        where: {
+          grade_key_competency_key: { grade_key: gradeKey, competency_key: compKey },
+        },
+        update: { level: levelCode },
+        create: { grade_key: gradeKey, competency_key: compKey, level: levelCode },
+      });
+    }
+  }
+  console.log(`  ✅ CEFR Expected Matrix populated for ${Object.keys(CEFR_EXPECTED_MATRIX).length} grades.`);
+
   console.log(`
 ✅ Seed complete!
    Grades:                ${GRADES.length}
@@ -1063,6 +1092,7 @@ async function main() {
    Users:                 4  (password: password123)
    Appraisal Periods:     ${APPRAISAL_PERIODS.length}  (CY2024, CY2025, CY2026)
    Behavioral Framework:  ${BEHAV_COMPETENCIES.length} Competencies across ${BEHAV_GRADES.length} Grades
+   CEFR Framework:        6 Competencies across ${BEHAV_GRADES.length} Grades
   `);
 }
 

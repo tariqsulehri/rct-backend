@@ -1,6 +1,11 @@
 import { describe, it, expect } from '@jest/globals';
-import { assess, roundHalfUp, bandOf, statusOf, expectedFor, RatingInput } from './cefr.engine';
-import { DEFAULT_CEFR_CONFIG } from './cefr.config';
+import { assess, roundHalfUp, bandOf, statusOf, RatingInput } from './cefr.engine';
+import { DEFAULT_CEFR_CONFIG, CefrLevelCode } from './cefr.config';
+
+const SENIOR_EXPECTED: Record<string, CefrLevelCode> = { default: 'B2' };
+const ASSOCIATE_EXPECTED: Record<string, CefrLevelCode> = { default: 'B1', presentation: 'A2', stakeholder_exec: 'A2' };
+const VP_EXPECTED: Record<string, CefrLevelCode> = { default: 'C2' };
+const MANAGER_EXPECTED: Record<string, CefrLevelCode> = { default: 'C1' };
 
 describe('CEFR Communication Rule Engine', () => {
   describe('Helper functions & math determinism', () => {
@@ -31,12 +36,7 @@ describe('CEFR Communication Rule Engine', () => {
       expect(bandOf(1.00)).toBe('C2');
     });
 
-    it('resolves expected CEFR levels with target overrides for associates', () => {
-      expect(expectedFor(DEFAULT_CEFR_CONFIG, 'associate', 'written_clarity')).toBe('B1');
-      expect(expectedFor(DEFAULT_CEFR_CONFIG, 'associate', 'presentation')).toBe('A2');
-      expect(expectedFor(DEFAULT_CEFR_CONFIG, 'associate', 'stakeholder_exec')).toBe('A2');
-      expect(expectedFor(DEFAULT_CEFR_CONFIG, 'senior', 'presentation')).toBe('B2');
-    });
+
 
     it('maps numerical gaps to status strings', () => {
       expect(statusOf(-0.17)).toBe('BELOW');
@@ -56,7 +56,7 @@ describe('CEFR Communication Rule Engine', () => {
         { competencyKey: 'cross_cultural', cefr: 'B2' },
       ];
 
-      const result = assess(DEFAULT_CEFR_CONFIG, 'senior', ratings);
+      const result = assess(DEFAULT_CEFR_CONFIG, SENIOR_EXPECTED, 3, ratings);
 
       expect(result.overallWeight).toBe(0.61);
       expect(result.overallCefr).toBe('B2');
@@ -91,7 +91,7 @@ describe('CEFR Communication Rule Engine', () => {
         { competencyKey: 'cross_cultural', cefr: 'B1' },
       ];
 
-      const result = assess(DEFAULT_CEFR_CONFIG, 'associate', ratings);
+      const result = assess(DEFAULT_CEFR_CONFIG, ASSOCIATE_EXPECTED, 1, ratings);
 
       expect(result.overallWeight).toBe(0.50);
       expect(result.overallCefr).toBe('B1');
@@ -129,7 +129,7 @@ describe('CEFR Communication Rule Engine', () => {
         { competencyKey: 'cross_cultural', cefr: 'C1' },
       ];
 
-      const result = assess(DEFAULT_CEFR_CONFIG, 'vp', ratings);
+      const result = assess(DEFAULT_CEFR_CONFIG, VP_EXPECTED, 8, ratings);
 
       expect(result.overallWeight).toBe(0.83);
       expect(result.overallCefr).toBe('C1');
@@ -152,7 +152,7 @@ describe('CEFR Communication Rule Engine', () => {
         { competencyKey: 'cross_cultural', cefr: 'C1' },
       ];
 
-      const result = assess(DEFAULT_CEFR_CONFIG, 'manager', ratings);
+      const result = assess(DEFAULT_CEFR_CONFIG, MANAGER_EXPECTED, 5, ratings);
 
       expect(result.overallWeight).toBe(0.83);
       expect(result.overallCefr).toBe('C1');
@@ -174,7 +174,7 @@ describe('CEFR Communication Rule Engine', () => {
         { competencyKey: 'stakeholder_exec', cefr: 'B1' },
       ];
 
-      const result = assess(DEFAULT_CEFR_CONFIG, 'senior', ratings);
+      const result = assess(DEFAULT_CEFR_CONFIG, SENIOR_EXPECTED, 3, ratings);
 
       expect(result.complete).toBe(false);
       expect(result.communicationReady).toBeNull();
@@ -186,7 +186,7 @@ describe('CEFR Communication Rule Engine', () => {
   describe('Validation & Edge Cases', () => {
     it('throws error when invalid CEFR level code is provided', () => {
       expect(() =>
-        assess(DEFAULT_CEFR_CONFIG, 'senior', [
+        assess(DEFAULT_CEFR_CONFIG, SENIOR_EXPECTED, 3, [
           { competencyKey: 'written_clarity', cefr: 'D1' as any },
         ]),
       ).toThrow("Invalid CEFR level code: 'D1'");
@@ -194,7 +194,7 @@ describe('CEFR Communication Rule Engine', () => {
 
     it('throws error when invalid competency key is provided', () => {
       expect(() =>
-        assess(DEFAULT_CEFR_CONFIG, 'senior', [
+        assess(DEFAULT_CEFR_CONFIG, SENIOR_EXPECTED, 3, [
           { competencyKey: 'invalid_key', cefr: 'B2' },
         ]),
       ).toThrow("Invalid competency key: 'invalid_key'");
@@ -202,19 +202,11 @@ describe('CEFR Communication Rule Engine', () => {
 
     it('throws error when duplicate competency rating is supplied', () => {
       expect(() =>
-        assess(DEFAULT_CEFR_CONFIG, 'senior', [
+        assess(DEFAULT_CEFR_CONFIG, SENIOR_EXPECTED, 3, [
           { competencyKey: 'written_clarity', cefr: 'B1' },
           { competencyKey: 'written_clarity', cefr: 'B2' },
         ]),
       ).toThrow("Duplicate rating for competency 'written_clarity'");
-    });
-
-    it('throws error when invalid org level key is provided', () => {
-      expect(() =>
-        assess(DEFAULT_CEFR_CONFIG, 'unknown_level', [
-          { competencyKey: 'written_clarity', cefr: 'B1' },
-        ]),
-      ).toThrow("Invalid org level key: 'unknown_level'");
     });
   });
 });
