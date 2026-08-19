@@ -58,17 +58,20 @@ interface GapEntry {
 }
 
 function evaluateEmployeeCefr(empTargetGradeLevel: number, cefrRecord?: any) {
-  const orgKey = gradeLevelToOrgLevelKey(empTargetGradeLevel ?? 2);
-  const cefrExpected = DEFAULT_CEFR_CONFIG.orgLevels[orgKey]?.expectedCefr ?? 'B2';
-
   if (!cefrRecord || !cefrRecord.ratings || cefrRecord.ratings.length === 0) {
     return {
       cefrLevel: 'B1' as CefrLevelCode,
-      cefrExpected,
+      cefrExpected: 'B2',
       isCefrGated: true,
       isCefrReady: false,
     };
   }
+
+  const expectedCefrs: Record<string, CefrLevelCode> = {};
+  for (const rec of cefrRecord.ratings) {
+    expectedCefrs[rec.competency_key] = rec.level as CefrLevelCode;
+  }
+  const cefrExpected = expectedCefrs['default'] ?? Object.values(expectedCefrs)[0] ?? 'B2';
 
   const ratingsInput: RatingInput[] = cefrRecord.ratings.map((r: any) => ({
     competencyKey: r.competency_key,
@@ -76,7 +79,7 @@ function evaluateEmployeeCefr(empTargetGradeLevel: number, cefrRecord?: any) {
     evidence: r.evidence,
   }));
 
-  const evaluation = assess(DEFAULT_CEFR_CONFIG, orgKey, ratingsInput);
+  const evaluation = assess(DEFAULT_CEFR_CONFIG, expectedCefrs, empTargetGradeLevel, ratingsInput);
   const cefrLevel = evaluation.overallCefr ?? 'B1';
   const isCefrReady = evaluation.communicationReady ?? false;
   const isCefrGated = !isCefrReady;
@@ -525,7 +528,7 @@ export async function getExecutiveSummaryReport(userId: number, managerId: numbe
     const finalTechScore = Number((weightedOverall(domainScores, domainWeightMap.get(emp.target_grade_id)) * 100).toFixed(1));
 
     const thresholds = getGradeThresholdMap(matrixMap, emp.department_id, emp.target_grade_id);
-    const competency_gaps = allCompetencies.map((c) => buildCompetencyGapDetail(c, compScoreMap, thresholds, { departmentId: emp.department_id, fallbackDomain: c.domain }));
+    const competency_gaps = allCompetencies.map((c) => buildCompetencyGapDetail(c, compScoreMap, thresholds, { departmentId: emp.department_id }));
     const domain_gaps = buildDomainGapSummary(competency_gaps, domainNames);
     const thresholdRecord: Record<string, number> = Object.fromEntries(
       Object.entries(domain_gaps).filter(([, d]) => d.threshold > 0).map(([k, d]) => [k, d.threshold])
